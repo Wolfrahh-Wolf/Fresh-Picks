@@ -78,6 +78,8 @@
 .cart-progress-pulse { animation: fpPulse 1.4s ease-in-out infinite; }
 </style>
 
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
 {% endblock %}
 
 {% block content %}
@@ -402,7 +404,7 @@
                                     onclick="confirmPayment()"
                                     class="btn cart-confirm-btn"
                                     style="flex:2;">
-                                <i class="bi bi-shield-check me-2"></i>Confirm Payment
+                                <i class="bi bi-shield-check me-2"></i>Proceed to Payment
                             </button>
                         </div>
 
@@ -987,30 +989,147 @@ function renderInvoicePreview() {
 {% endraw %}
 
 async function confirmPayment() {
-    const slot = document.getElementById("selectedSlot").value;
-    if (!slot) { showToast("Please select a delivery slot first.", "warning"); goToState(2); return; }
+
+    /* ── Guard: read the selected slot ──────────────────────────────────── */
+    const slot = selectedSlot;
+    if (!slot) {
+        showToast("Please select a delivery slot first.", "warning");
+        return;
+    }
+
+    /* ── Disable button to prevent double-submission ─────────────────────── */
     const btn = document.getElementById("confirmPayBtn");
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-sm"></span> Processing payment…';
+    if (btn) {
+        btn.disabled    = true;
+        btn.innerHTML   = `<span class="spinner-border spinner-border-sm me-2"></span>Connecting...`;
+    }
+
     try {
-        const resp   = await fetch("/api/checkout", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body:   JSON.stringify({ delivery_slot: slot })
+
+        /* ══════════════════════════════════════════════════════════════════
+           STEP A — Create Razorpay order on the server
+           ══════════════════════════════════════════════════════════════════ */
+        const orderRes  = await fetch("/api/create_razorpay_order", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ delivery_slot: slot })
         });
-        const result = await resp.json();
-        if (result.status === "SUCCESS") {
-            checkoutResult = result;
-            renderReceipt(result);
-            goToState(5);
-        } else {
-            showToast(result.message || "Payment failed. Please try again.", "danger");
-            btn.disabled  = false;
-            btn.innerHTML = '<i class="bi bi-shield-check me-2"></i>Confirm Payment';
+        const orderData = await orderRes.json();
+
+        if (orderData.status !== "SUCCESS") {
+            throw new Error(orderData.message || "Could not initiate payment");
         }
+
+        /* ══════════════════════════════════════════════════════════════════
+           STEP B — Open Razorpay checkout modal
+           ══════════════════════════════════════════════════════════════════ */
+        await new Promise((resolve, reject) => {
+
+            const options = {
+                /* Credentials & order */
+                key:      orderData.key_id,
+                amount:   orderData.amount,          // in paise
+                currency: orderData.currency,
+                order_id: orderData.razorpay_order_id,
+
+                /* Branding shown inside the modal */
+                name:        "Fresh Picks",
+                description: `${slot} Slot Delivery`,
+                // Will Be Added in Production
+                // image:       "/static/images/logo.png",  // your logo path
+
+                /* Pre-fill from session if you want (optional) */
+                // prefill: { name: "...", email: "...", contact: "..." },
+
+                /* Theme — match your site's accent colour */
+                theme: { color: "#2ecc71" },
+
+                /* ── Payment success handler ─────────────────────────────
+                   Razorpay calls this with the three verification fields.
+                   We don't commit the order here — we send these to Flask
+                   for server-side HMAC verification first.            ── */
+                handler: async function (response) {
+                    try {
+                        /* Update button state */
+                        if (btn) {
+                            btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Verifying...`;
+                        }
+
+                        /* ══════════════════════════════════════════════════
+                           STEP C — Verify signature + commit order
+                           ══════════════════════════════════════════════════ */
+                        const verifyRes  = await fetch("/api/verify_and_checkout", {
+                            method:  "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body:    JSON.stringify({
+                                razorpay_order_id:   response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature:  response.razorpay_signature
+                            })
+                        });
+                        const verifyData = await verifyRes.json();
+
+                        if (verifyData.status !== "SUCCESS") {
+                            throw new Error(verifyData.message || "Order verification failed");
+                        }
+
+                        /* ══════════════════════════════════════════════════
+                           STEP D — Render receipt (identical to old flow)
+                           verifyData has the exact same shape as the old
+                           /api/checkout response, so renderReceipt() works
+                           without any modification.
+                           ══════════════════════════════════════════════════ */
+                        renderReceipt(verifyData);
+                        resolve();
+
+                    } catch (err) {
+                        reject(err);
+                    }
+                },
+
+                /* ── Modal dismissed without paying ─────────────────────── */
+                modal: {
+                    ondismiss: function () {
+                        reject(new Error("Payment cancelled"));
+                    }
+                }
+            };
+
+            /* Open the modal */
+            const rzp = new Razorpay(options);
+
+            /* ── Payment failure inside the modal (e.g. wrong card) ──────── */
+            rzp.on("payment.failed", function (failureResponse) {
+                reject(new Error(
+                    failureResponse.error?.description || "Payment failed"
+                ));
+            });
+
+            rzp.open();
+
+            // Safety net — if modal gets stuck due to mixed-content blocking,
+            // reject after 3 minutes so the button re-enables and user can retry
+            const _safetyTimer = setTimeout(() => {
+                reject(new Error("Payment timed out. Please try again."));
+            }, 180000);
+
+            // Clear the timer if handler() fires normally
+            // (wrap your handler resolve/reject calls to clear it)
+
+        });
+
+        /* If we reach here, everything succeeded — button stays disabled
+           (the receipt state is already shown, no need to re-enable it). */
+
     } catch (err) {
-        showToast("Could not process payment. Check server connection.", "danger");
-        btn.disabled  = false;
-        btn.innerHTML = '<i class="bi bi-shield-check me-2"></i>Confirm Payment';
+        /* ── Any failure: network error, bad signature, C binary error ───── */
+        showToast(err.message || "Payment failed. Please try again.", "danger");
+
+        /* Re-enable the button so the user can retry */
+        if (btn) {
+            btn.disabled  = false;
+            btn.innerHTML = `<i class="bi bi-shield-check me-2"></i>Proceed to Payment`;
+        }
     }
 }
 

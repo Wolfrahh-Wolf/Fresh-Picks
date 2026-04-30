@@ -86,7 +86,9 @@ import ssl
 import os
 import tempfile
 import sys
+import razorpay
 from datetime import datetime
+from config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
 
 from flask import (
     Flask,
@@ -102,6 +104,7 @@ from flask import (
 from bridge import run_c_binary
 from generate_receipt import generate_receipt
 
+_rzp_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
 # ─────────────────────────────────────────────────────────────
 # Flask App Setup
@@ -211,6 +214,19 @@ def _parse_multiline_orders(raw_output):
 # All routes apply a guard clause FIRST; if the check fails,
 # we return the redirect immediately without proceeding further.
 # =============================================================
+
+@app.after_request
+def set_security_headers(response):
+    # Use wildcard (*) so the policy delegates down into Razorpay's
+    # cross-origin iframe. Quoted-origin syntax doesn't propagate to iframes.
+    response.headers["Permissions-Policy"] = (
+        "accelerometer=*, gyroscope=*, magnetometer=*"
+    )
+    # Expose Razorpay's internal tracking headers across the XHR boundary.
+    response.headers["Access-Control-Expose-Headers"] = (
+        "x-rtb-fingerprint-id, request-id"
+    )
+    return response
 
 @app.route("/")
 def index():
@@ -832,33 +848,244 @@ def api_remove_item():
     result = run_c_binary("order", ["remove_item", session["user_id"], veg_id])
     return jsonify({"status": result["status"], "message": result["data"]})
 
+""" DEPRECATED """
+# @app.route("/api/checkout", methods=["POST"])
+# def api_checkout():
+#     """
+#     POST /api/checkout
+#     Body: { "delivery_slot": "Morning|Afternoon|Evening" }
+#     Calls: ./order checkout <user_id> <delivery_slot>
 
-@app.route("/api/checkout", methods=["POST"])
-def api_checkout():
+#     C output (first line):
+#       SUCCESS|order_id|total|slot|boy_name|boy_phone|items_string
+#     """
+#     if "user_id" not in session:
+#         return jsonify({"status": "ERROR", "message": "Not logged in"})
+
+#     data = request.get_json() or {}
+#     slot = data.get("delivery_slot", "").strip()
+
+#     VALID_SLOTS = {"Morning", "Afternoon", "Evening"}
+#     if slot not in VALID_SLOTS:
+#         return jsonify({"status": "ERROR", "message": "Invalid slot"})
+
+#     result = run_c_binary("order", ["checkout", session["user_id"], slot])
+
+#     if result["status"] != "SUCCESS":
+#         return jsonify({"status": "ERROR", "message": result["data"]})
+
+#     parts = result["raw_output"].strip().split("\n")[0].split("|")
+#     return jsonify({
+#         "status":   "SUCCESS",
+#         "order_id": parts[1] if len(parts) > 1 else "",
+#         "total":    _safe_float(parts[2]) if len(parts) > 2 else 0.0,
+#         "slot":     parts[3] if len(parts) > 3 else "",
+#         "boy_name": parts[4] if len(parts) > 4 else "Unknown",
+#         "boy_phone":parts[5] if len(parts) > 5 else "N/A",
+#         "items":    parts[6] if len(parts) > 6 else ""
+#     })
+
+@app.route("/api/create_razorpay_order", methods=["POST"])
+def api_create_razorpay_order():
     """
-    POST /api/checkout
+    POST /api/create_razorpay_order
     Body: { "delivery_slot": "Morning|Afternoon|Evening" }
-    Calls: ./order checkout <user_id> <delivery_slot>
 
-    C output (first line):
-      SUCCESS|order_id|total|slot|boy_name|boy_phone|items_string
+    STEP 1 OF 2 in the Razorpay payment flow.
+
+    PURPOSE:
+      - Validates the slot and session.
+      - Fetches the current cart total from the C binary (view_cart).
+      - Creates a Razorpay Order on Razorpay's servers.
+      - Returns the razorpay_order_id + amount + key_id to the frontend
+        so the browser can open the Razorpay checkout modal.
+      - Does NOT touch orders.dat. No order is committed yet.
+
+    Returns:
+      {
+        "status":            "SUCCESS",
+        "razorpay_order_id": "order_XXXXXXXXXXXXXXXX",
+        "amount":            25000,        ← paise (₹250.00 × 100)
+        "currency":          "INR",
+        "key_id":            "rzp_test_...",
+        "slot":              "Morning"
+      }
     """
     if "user_id" not in session:
-        return jsonify({"status": "ERROR", "message": "Not logged in"})
+        return jsonify({"status": "ERROR", "message": "Not logged in"}), 401
 
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     slot = data.get("delivery_slot", "").strip()
 
     VALID_SLOTS = {"Morning", "Afternoon", "Evening"}
     if slot not in VALID_SLOTS:
-        return jsonify({"status": "ERROR", "message": "Invalid slot"})
+        return jsonify({"status": "ERROR", "message": "Invalid delivery slot"})
 
+    # ── Fetch cart total from C binary ───────────────────────────────────────
+    # We call view_cart so we know the exact amount to charge.
+    # The C binary returns: SUCCESS|<cart_total>\n<item lines...>
+    cart_result = run_c_binary("order", ["view_cart", session["user_id"]])
+
+    if cart_result["status"] != "SUCCESS":
+        return jsonify({"status": "ERROR", "message": "Could not read cart"})
+
+    lines      = cart_result["raw_output"].strip().split("\n")
+    cart_total = _safe_float(lines[0].split("|")[1]) if lines else 0.0
+
+    if cart_total < 100.0:
+        return jsonify({
+            "status":  "ERROR",
+            "message": "Minimum order amount is ₹100"
+        })
+
+    # ── Create Razorpay order ─────────────────────────────────────────────────
+    # Razorpay amounts are always in the smallest currency unit (paise).
+    # ₹250.75 → 25075 paise. We round to avoid float precision issues.
+    amount_paise = int(round(cart_total * 100))
+
+    try:
+        rzp_order = _rzp_client.order.create({
+            "amount":   amount_paise,
+            "currency": "INR",
+            "receipt":  f"fp_{session['user_id']}_{slot}",
+            "notes": {
+                "user_id": session["user_id"],
+                "slot":    slot,
+                "project": "FreshPicks-SDP1"
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "status":  "ERROR",
+            "message": f"Razorpay order creation failed: {str(e)}"
+        })
+
+    # Store slot in session so /api/verify_and_checkout can read it
+    # without the frontend having to resend it (tamper-proofing).
+    session["pending_slot"]     = slot
+    session["pending_rzp_order"] = rzp_order["id"]
+
+    return jsonify({
+        "status":            "SUCCESS",
+        "razorpay_order_id": rzp_order["id"],
+        "amount":            amount_paise,
+        "currency":          "INR",
+        "key_id":            RAZORPAY_KEY_ID,
+        "slot":              slot
+    })
+
+
+@app.route("/api/verify_and_checkout", methods=["POST"])
+def api_verify_and_checkout():
+    """
+    POST /api/verify_and_checkout
+    Body:
+      {
+        "razorpay_order_id":   "order_XXXXXXXXXXXXXXXX",
+        "razorpay_payment_id": "pay_XXXXXXXXXXXXXXXX",
+        "razorpay_signature":  "<HMAC-SHA256 hex digest>"
+      }
+
+    STEP 2 OF 2 in the Razorpay payment flow.
+
+    PURPOSE:
+      - Verifies the HMAC-SHA256 signature that Razorpay sends to the
+        browser after a successful payment.
+      - Signature formula (from Razorpay docs):
+            HMAC_SHA256(razorpay_order_id + "|" + razorpay_payment_id,
+                        key_secret)
+      - If the signature is valid → calls the C binary to commit the order.
+      - If the signature is invalid → rejects immediately. Nothing is saved.
+
+    This is the critical security gate. The C binary is only called
+    AFTER the signature passes. A tampered or replayed payment cannot
+    commit an order.
+
+    Returns (same schema as the old /api/checkout):
+      {
+        "status":   "SUCCESS",
+        "order_id": "ORD1007",
+        "total":    250.00,
+        "slot":     "Morning",
+        "boy_name": "Ramesh",
+        "boy_phone":"9876543210",
+        "items":    "V1001:Tomato:500:30.00,..."
+      }
+    """
+    if "user_id" not in session:
+        return jsonify({"status": "ERROR", "message": "Not logged in"}), 401
+
+    data           = request.get_json(silent=True) or {}
+    rzp_order_id   = data.get("razorpay_order_id",   "").strip()
+    rzp_payment_id = data.get("razorpay_payment_id", "").strip()
+    rzp_signature  = data.get("razorpay_signature",  "").strip()
+
+    # ── Guard: all three fields must be present ───────────────────────────────
+    if not rzp_order_id or not rzp_payment_id or not rzp_signature:
+        return jsonify({
+            "status":  "ERROR",
+            "message": "Incomplete payment response"
+        })
+
+    # ── Guard: order_id must match what we stored in session ─────────────────
+    # This prevents a user from replaying a payment from a different session.
+    if rzp_order_id != session.get("pending_rzp_order"):
+        return jsonify({
+            "status":  "ERROR",
+            "message": "Order ID mismatch — possible replay attempt"
+        })
+
+    # ── HMAC-SHA256 Signature Verification ───────────────────────────────────
+    #
+    # Razorpay's verification formula:
+    #   expected_signature = HMAC_SHA256(
+    #       key    = KEY_SECRET (bytes),
+    #       msg    = razorpay_order_id + "|" + razorpay_payment_id (bytes)
+    #   ).hexdigest()
+    #
+    # If expected_signature == razorpay_signature → payment is genuine.
+    # If not → someone tampered with the response.
+    #
+
+    try:
+        _rzp_client.utility.verify_payment_signature({
+            "razorpay_order_id":   rzp_order_id,
+            "razorpay_payment_id": rzp_payment_id,
+            "razorpay_signature":  rzp_signature
+        })
+    except Exception:
+        return jsonify({
+            "status":  "ERROR",
+            "message": "Payment verification failed — invalid signature"
+        })
+
+    # ── Signature is valid — retrieve slot from session ───────────────────────
+    slot = session.get("pending_slot", "")
+    if slot not in {"Morning", "Afternoon", "Evening"}:
+        return jsonify({"status": "ERROR", "message": "Session slot missing"})
+
+    # ── Call the C binary to commit the order ─────────────────────────────────
+    # This is the ONLY point where orders.dat is written.
+    # Identical call to the old /api/checkout.
     result = run_c_binary("order", ["checkout", session["user_id"], slot])
 
     if result["status"] != "SUCCESS":
-        return jsonify({"status": "ERROR", "message": result["data"]})
+        # Payment went through on Razorpay's side but our backend failed.
+        # Log this — in production you'd trigger a refund here.
+        # For the demo, return the error and let the user contact support.
+        return jsonify({
+            "status":  "ERROR",
+            "message": f"Payment received but order failed: {result['data']}"
+        })
 
+    # ── Clean up pending session keys ────────────────────────────────────────
+    session.pop("pending_slot",      None)
+    session.pop("pending_rzp_order", None)
+
+    # ── Parse C binary output (identical schema to old /api/checkout) ─────────
+    # C stdout: SUCCESS|order_id|total|slot|boy_name|boy_phone|items_string
     parts = result["raw_output"].strip().split("\n")[0].split("|")
+
     return jsonify({
         "status":   "SUCCESS",
         "order_id": parts[1] if len(parts) > 1 else "",
@@ -868,7 +1095,6 @@ def api_checkout():
         "boy_phone":parts[5] if len(parts) > 5 else "N/A",
         "items":    parts[6] if len(parts) > 6 else ""
     })
-
 
 @app.route("/api/get_user_orders", methods=["POST"])
 def api_get_user_orders():
