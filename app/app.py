@@ -116,28 +116,7 @@ app = Flask(
     static_folder="../static"
 )
 
-def get_local_ip():
-    """
-    Detect the machine's active LAN/Wi-Fi IPv4 address without
-    sending any real traffic. Falls back to 127.0.0.1 on failure.
-    """
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "127.0.0.1"
 
-LOCAL_IP = get_local_ip()
-
-CORS(app, supports_credentials=True, origins=[
-    "http://localhost:5000",
-    "https://localhost:5000",
-    f"http://{LOCAL_IP}:5000",
-    f"https://{LOCAL_IP}:5000"
-])
 
 app.secret_key = "fresh_picks_secret_codecrafters_2026"
 
@@ -1614,22 +1593,29 @@ if __name__ == "__main__":
 
     import socket
 
-    # def get_local_ip():
-    #     """
-    #     Detect the machine's active LAN/Wi-Fi IPv4 address without
-    #     sending any real traffic. Falls back to 127.0.0.1 on failure.
-    #     """
-    #     try:
-    #         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    #         s.connect(("8.8.8.8", 80))
-    #         ip = s.getsockname()[0]
-    #         s.close()
-    #         return ip
-    #     except Exception:
-    #         return "127.0.0.1"
+    def get_local_ip():
+        """
+        Detect the machine's active LAN/Wi-Fi IPv4 address without
+        sending any real traffic. Falls back to 127.0.0.1 on failure.
+        """
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
 
-    # LOCAL_IP = get_local_ip()
+    LOCAL_IP = get_local_ip()
 
+    CORS(app, supports_credentials=True, origins=[
+        "http://localhost:5000",
+        "https://localhost:5000",
+        f"http://{LOCAL_IP}:5000",
+        f"https://{LOCAL_IP}:5000"
+    ])
+    
     print()
     print("=" * 62)
     print("  FreshPicks  |  CodeCrafters  |  SDP-1  |  HTTPS Server")
