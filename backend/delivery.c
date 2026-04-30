@@ -1,28 +1,6 @@
 /*
- * delivery.c - Fresh Picks: Post-Order Delivery Management (v4)
+ * delivery.c - Fresh Picks: Post-Order Delivery Management 
  * ==============================================================
- * REFACTORED OUT OF order.c (Session 6)
- * This binary handles everything that happens AFTER an order is placed:
- *   - Updating order status (dispatch, deliver, cancel)
- *   - Assigning / re-assigning delivery agents
- *   - Fetching active orders for the delivery dashboard
- *   - Batch slot promotion (JIT auto-dispatch)
- *   - Cancellation with fee deduction logic
- *
- * Called by Flask (app.py) via subprocess.run() like this:
- *   ./delivery <command> [arguments...]
- *
- * v4 MIGRATION NOTES:
- *   - All data files are now binary .dat structs accessed via utils.c.
- *   - Direct fopen/fread/fwrite/strtok over .txt files is FORBIDDEN.
- *   - The old load_all_orders / write_all_orders / load_delivery_boys_local
- *     helpers are removed; their roles are covered by load_order_sll(),
- *     save_order_sll(), load_delivery_boy_sll() from utils.c.
- *   - Business logic now traverses in-memory SLLs (Rule 2).
- *   - cmd_list_all_orders_sorted uses a local pointer array + qsort
- *     because the SLL has no random-access — same output contract.
- *
- * ─────────────────────────────────────────────────────────────────
  * COMMANDS (argv[1]):
  *
  *   update_status <order_id> <new_status>

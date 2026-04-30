@@ -460,8 +460,9 @@ AdminNode** build_admin_table(AdminNode* head) {
 }
 
 /* Build a fixed direct-index pointer table from the Vegetable SLL */
-VegNode** build_veg_table(VegNode* head) {
-    VegNode** table = (VegNode**)calloc(VEG_TABLE_SIZE, sizeof(VegNode*));
+VegNode** build_veg_table(VegNode* head, int* table_size) {
+    *table_size = VEG_TABLE_SIZE;
+    VegNode** table = (VegNode**)calloc(*table_size, sizeof(VegNode*));
     if (!table) return NULL;
 
     VegNode* curr = head;
@@ -476,8 +477,9 @@ VegNode** build_veg_table(VegNode* head) {
 }
 
 /* Build a fixed direct-index pointer table from the FreeItem SLL */
-FreeItemNode** build_free_table(FreeItemNode* head) {
-    FreeItemNode** table = (FreeItemNode**)calloc(FREE_TABLE_SIZE, sizeof(FreeItemNode*));
+FreeItemNode** build_free_table(FreeItemNode* head, int* table_size) {
+    *table_size = FREE_TABLE_SIZE; // Assign the constant to the pointer
+    FreeItemNode** table = (FreeItemNode**)calloc(*table_size, sizeof(FreeItemNode*));
     if (!table) return NULL;
 
     FreeItemNode* curr = head;

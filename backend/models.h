@@ -302,8 +302,8 @@ int  sll_count_users(UserNode* head);
 int            get_index_from_id(const char* id);
 UserNode**     build_user_table(UserNode* head, int* current_max_size);
 AdminNode**    build_admin_table(AdminNode* head);
-VegNode**      build_veg_table(VegNode* head);
-FreeItemNode** build_free_table(FreeItemNode* head);
+VegNode**      build_veg_table(VegNode* head, int* table_size);
+FreeItemNode** build_free_table(FreeItemNode* head, int* table_size);
 OrderNode**    build_order_table(OrderNode* head, int* current_max_size);
 
 /* ── Doubly Linked List (Cart) ── */
