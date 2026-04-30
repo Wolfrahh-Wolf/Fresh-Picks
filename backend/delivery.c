@@ -50,36 +50,35 @@
    SECTION 1: HELPER FUNCTIONS
    ═════════════════════════════════════════════════════════════ */
 
-/* Map delivery_boy_id to name/phone via O(1) table; falls back to "Unknown"/"N/A" */
-static void find_boy_in_table(DeliveryBoyNode** boy_table, const char* boy_id,
-                               char* out_name, char* out_phone) {
+/* Walk DeliveryBoyNode SLL and fill out_name/out_phone for boy_id; falls back to "Unknown"/"N/A" */
+static void find_boy_in_sll(DeliveryBoyNode* head, const char* boy_id,
+                             char* out_name, char* out_phone) {
     strncpy(out_name,  "Unknown", MAX_STR_LEN - 1);
     strncpy(out_phone, "N/A",     MAX_STR_LEN - 1);
     out_name [MAX_STR_LEN - 1] = '\0';
     out_phone[MAX_STR_LEN - 1] = '\0';
 
-    if (!boy_table || !boy_id || boy_id[0] == '\0') return;
-
-    int idx = get_index_from_id(boy_id);
-    if (idx < 0 || idx >= DELIVERY_TABLE_SIZE) return;
-
-    DeliveryBoyNode* match = boy_table[idx];
-    if (!match) return;
-
-    strncpy(out_name,  match->data.name,  MAX_STR_LEN - 1);
-    strncpy(out_phone, match->data.phone, MAX_STR_LEN - 1);
-    out_name [MAX_STR_LEN - 1] = '\0';
-    out_phone[MAX_STR_LEN - 1] = '\0';
+    DeliveryBoyNode* curr = head;
+    while (curr) {
+        if (strcmp(curr->data.boy_id, boy_id) == 0) {
+            strncpy(out_name,  curr->data.name,  MAX_STR_LEN - 1);
+            strncpy(out_phone, curr->data.phone, MAX_STR_LEN - 1);
+            out_name [MAX_STR_LEN - 1] = '\0';
+            out_phone[MAX_STR_LEN - 1] = '\0';
+            return;
+        }
+        curr = curr->next;
+    }
 }
 
-/* Map slot name to numeric priority: Morning=1, Afternoon=2, Evening=3 */
+/* Map a delivery slot string to a numeric sort priority: Morning=1, Afternoon=2, Evening=3 */
 static int get_slot_priority(const char* slot) {
     if (strcmp(slot, "Morning")   == 0) return 1;
     if (strcmp(slot, "Afternoon") == 0) return 2;
     return 3;
 }
 
-/* qsort comparator — slot priority ASC, then timestamp ASC as tiebreaker */
+/* qsort comparator: slot priority ASC, then timestamp ASC as tiebreaker */
 static int compare_orders_priority(const void* a, const void* b) {
     const Order* oa = (const Order*)a;
     const Order* ob = (const Order*)b;
@@ -88,32 +87,15 @@ static int compare_orders_priority(const void* a, const void* b) {
     return strcmp(oa->timestamp, ob->timestamp);
 }
 
-/* Build a fixed-size DeliveryBoy pointer table from the SLL using DELIVERY_TABLE_SIZE */
-static DeliveryBoyNode** build_delivery_boy_table(DeliveryBoyNode* head) {
-    DeliveryBoyNode** table =
-        (DeliveryBoyNode**)calloc(DELIVERY_TABLE_SIZE, sizeof(DeliveryBoyNode*));
-    if (!table) return NULL;
-
-    DeliveryBoyNode* curr = head;
-    while (curr) {
-        int idx = get_index_from_id(curr->data.boy_id);
-        if (idx >= 0 && idx < DELIVERY_TABLE_SIZE)
-            table[idx] = curr;
-        curr = curr->next;
-    }
-
-    return table;
-}
-
 
 /* ═════════════════════════════════════════════════════════════
    SECTION 2: COMMAND HANDLER FUNCTIONS
    ═════════════════════════════════════════════════════════════ */
 
-/* Change the status field of ONE order via O(1) table lookup, then persist */
-static void cmd_update_status(const char* order_id, const char* new_status,
-                               OrderNode** ord_table, int ord_table_size,
-                               OrderNode*  ord_head) {
+/* Change the status field of ONE order via O(1) table lookup and persist */
+void cmd_update_status(OrderNode** ord_table, int ord_table_size,
+                       OrderNode* ord_head,
+                       const char* order_id, const char* new_status) {
     const char* VALID[] = {
         "Order Placed", "Out for Delivery", "Delivered", "Cancelled"
     };
@@ -121,15 +103,9 @@ static void cmd_update_status(const char* order_id, const char* new_status,
     for (int i = 0; i < 4; i++) {
         if (strcmp(new_status, VALID[i]) == 0) { valid = 1; break; }
     }
-    if (!valid) {
-        PRINT_ERROR("Invalid status value");
-        return;
-    }
+    if (!valid) { PRINT_ERROR("Invalid status value"); return; }
 
-    if (!ord_table || !ord_head) {
-        PRINT_ERROR("No orders found");
-        return;
-    }
+    if (!ord_head) { PRINT_ERROR("No orders found"); return; }
 
     int idx = get_index_from_id(order_id);
     if (idx < 0 || idx >= ord_table_size || !ord_table[idx]) {
@@ -145,14 +121,11 @@ static void cmd_update_status(const char* order_id, const char* new_status,
     PRINT_SUCCESS("Status updated");
 }
 
-/* Cancel ONE order; only "Order Placed" orders are eligible */
-static void cmd_cancel_order(const char* order_id,
-                              OrderNode** ord_table, int ord_table_size,
-                              OrderNode*  ord_head) {
-    if (!ord_table || !ord_head) {
-        PRINT_ERROR("No orders found");
-        return;
-    }
+/* Cancel an order; only "Order Placed" orders are eligible */
+void cmd_cancel_order(OrderNode** ord_table, int ord_table_size,
+                      OrderNode* ord_head,
+                      const char* order_id) {
+    if (!ord_head) { PRINT_ERROR("No orders found"); return; }
 
     int idx = get_index_from_id(order_id);
     if (idx < 0 || idx >= ord_table_size || !ord_table[idx]) {
@@ -173,10 +146,9 @@ static void cmd_cancel_order(const char* order_id,
     PRINT_SUCCESS("Order cancelled");
 }
 
-/* Return all active orders (Order Placed / Out for Delivery) enriched with boy data */
-static void cmd_get_active_orders(OrderNode*       ord_head,
-                                   DeliveryBoyNode** boy_table) {
-    /* Count active orders first to emit the header line */
+/* Return all "Order Placed" / "Out for Delivery" orders enriched with boy name+phone */
+void cmd_get_active_orders(OrderNode* ord_head, DeliveryBoyNode* boy_head) {
+    /* Count active orders first so the header can be printed */
     int        active = 0;
     OrderNode* curr   = ord_head;
     while (curr) {
@@ -196,10 +168,9 @@ static void cmd_get_active_orders(OrderNode*       ord_head,
             continue;
         }
 
-        char boy_name [MAX_STR_LEN];
-        char boy_phone[MAX_STR_LEN];
-        find_boy_in_table(boy_table, curr->data.delivery_boy_id,
-                          boy_name, boy_phone);
+        char boy_name [MAX_STR_LEN] = "Unknown";
+        char boy_phone[MAX_STR_LEN] = "N/A";
+        find_boy_in_sll(boy_head, curr->data.delivery_boy_id, boy_name, boy_phone);
 
         printf("%s|%s|%.2f|%s|%s|%s|%s|%s|%s|%s\n",
             curr->data.order_id,
@@ -217,14 +188,11 @@ static void cmd_get_active_orders(OrderNode*       ord_head,
     }
 }
 
-/* Override delivery_boy_id on ONE specific order via O(1) table lookup */
-static void cmd_assign_agent(const char* order_id, const char* boy_id,
-                              OrderNode** ord_table, int ord_table_size,
-                              OrderNode*  ord_head) {
-    if (!ord_table || !ord_head) {
-        PRINT_ERROR("No orders found");
-        return;
-    }
+/* Override the delivery_boy_id on one specific order via O(1) lookup and persist */
+void cmd_assign_agent(OrderNode** ord_table, int ord_table_size,
+                      OrderNode* ord_head,
+                      const char* order_id, const char* boy_id) {
+    if (!ord_head) { PRINT_ERROR("No orders found"); return; }
 
     int idx = get_index_from_id(order_id);
     if (idx < 0 || idx >= ord_table_size || !ord_table[idx]) {
@@ -240,9 +208,8 @@ static void cmd_assign_agent(const char* order_id, const char* boy_id,
     PRINT_SUCCESS("Agent assigned");
 }
 
-/* Flip ALL "Order Placed" orders for a given slot to "Out for Delivery" */
-static void cmd_batch_promote_slot(const char* slot_name,
-                                    OrderNode*  ord_head) {
+/* Flip all "Order Placed" orders for a given slot to "Out for Delivery"; returns count promoted */
+void cmd_batch_promote_slot(OrderNode* ord_head, const char* slot_name) {
     if (strcmp(slot_name, "Morning")   != 0 &&
         strcmp(slot_name, "Afternoon") != 0 &&
         strcmp(slot_name, "Evening")   != 0) {
@@ -250,10 +217,7 @@ static void cmd_batch_promote_slot(const char* slot_name,
         return;
     }
 
-    if (!ord_head) {
-        PRINT_SUCCESS("0");
-        return;
-    }
+    if (!ord_head) { PRINT_SUCCESS("0"); return; }
 
     int        promoted = 0;
     OrderNode* curr     = ord_head;
@@ -274,40 +238,35 @@ static void cmd_batch_promote_slot(const char* slot_name,
     PRINT_SUCCESS(result);
 }
 
-/* Dump every order newest-first, enriched with boy_name + boy_phone */
-static void cmd_list_all_orders(OrderNode*        ord_head,
-                                 DeliveryBoyNode** boy_table) {
+/* Dump every order newest-first enriched with boy_name+boy_phone; used by admin full-view */
+void cmd_list_all_orders(OrderNode* ord_head, DeliveryBoyNode* boy_head) {
     int total = sll_count_orders(ord_head);
     printf("SUCCESS|%d\n", total);
 
     if (total == 0) return;
 
-    /* Collect node pointers for reverse-order iteration */
+    /* Collect node pointers for reverse (newest-first) iteration */
     OrderNode** ptrs = (OrderNode**)malloc(sizeof(OrderNode*) * total);
     if (!ptrs) return;
 
-    int        i    = 0;
+    int        idx  = 0;
     OrderNode* curr = ord_head;
-    while (curr) {
-        ptrs[i++] = curr;
-        curr = curr->next;
-    }
+    while (curr) { ptrs[idx++] = curr; curr = curr->next; }
 
-    for (int j = i - 1; j >= 0; j--) {
-        char boy_name [MAX_STR_LEN];
-        char boy_phone[MAX_STR_LEN];
-        find_boy_in_table(boy_table, ptrs[j]->data.delivery_boy_id,
-                          boy_name, boy_phone);
+    for (int i = idx - 1; i >= 0; i--) {
+        char boy_name [MAX_STR_LEN] = "Unknown";
+        char boy_phone[MAX_STR_LEN] = "N/A";
+        find_boy_in_sll(boy_head, ptrs[i]->data.delivery_boy_id, boy_name, boy_phone);
 
         printf("%s|%s|%.2f|%s|%s|%s|%s|%s|%s|%s\n",
-            ptrs[j]->data.order_id,
-            ptrs[j]->data.user_id,
-            ptrs[j]->data.total_amount,
-            ptrs[j]->data.delivery_slot,
-            ptrs[j]->data.delivery_boy_id,
-            ptrs[j]->data.status,
-            ptrs[j]->data.timestamp,
-            ptrs[j]->data.items_string,
+            ptrs[i]->data.order_id,
+            ptrs[i]->data.user_id,
+            ptrs[i]->data.total_amount,
+            ptrs[i]->data.delivery_slot,
+            ptrs[i]->data.delivery_boy_id,
+            ptrs[i]->data.status,
+            ptrs[i]->data.timestamp,
+            ptrs[i]->data.items_string,
             boy_name,
             boy_phone
         );
@@ -316,9 +275,8 @@ static void cmd_list_all_orders(OrderNode*        ord_head,
     free(ptrs);
 }
 
-/* Dump ALL orders sorted by slot priority ASC, then timestamp ASC */
-static void cmd_list_all_orders_sorted(OrderNode*        ord_head,
-                                        DeliveryBoyNode** boy_table) {
+/* Dump all orders sorted by slot priority ASC then timestamp ASC, enriched with boy info */
+void cmd_list_all_orders_sorted(OrderNode* ord_head, DeliveryBoyNode* boy_head) {
     int total = sll_count_orders(ord_head);
     printf("SUCCESS|%d\n", total);
 
@@ -340,10 +298,9 @@ static void cmd_list_all_orders_sorted(OrderNode*        ord_head,
     qsort(arr, total, sizeof(Order), compare_orders_priority);
 
     for (int i = 0; i < total; i++) {
-        char boy_name [MAX_STR_LEN];
-        char boy_phone[MAX_STR_LEN];
-        find_boy_in_table(boy_table, arr[i].delivery_boy_id,
-                          boy_name, boy_phone);
+        char boy_name [MAX_STR_LEN] = "Unknown";
+        char boy_phone[MAX_STR_LEN] = "N/A";
+        find_boy_in_sll(boy_head, arr[i].delivery_boy_id, boy_name, boy_phone);
 
         printf("%s|%s|%.2f|%s|%s|%s|%s|%s|%s|%s\n",
             arr[i].order_id,
@@ -364,51 +321,56 @@ static void cmd_list_all_orders_sorted(OrderNode*        ord_head,
 
 
 /* ═════════════════════════════════════════════════════════════
-   SECTION 3: MAIN — Load, Build Tables, Dispatch, Teardown
+   SECTION 3: MAIN — Command Dispatcher
    ═════════════════════════════════════════════════════════════ */
 
+/* Entry point: loads all SLLs + builds pointer tables once, dispatches to handlers, then frees */
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         PRINT_ERROR("No command. Usage: ./delivery <command> [args]");
         return 1;
     }
 
-    const char* cmd = argv[1];
-
-    /* ── Load SLLs once ── */
+    /* Load SLLs once for the lifetime of this process */
     OrderNode*       ord_head = load_order_sll();
     DeliveryBoyNode* boy_head = load_delivery_boy_sll();
 
-    /* ── Build pointer tables ── */
+    /* Build order pointer table; delivery boys have no build_*_table, use SLL traversal */
     int          ord_table_size = 0;
-    OrderNode**       ord_table = build_order_table(ord_head, &ord_table_size);
-    DeliveryBoyNode** boy_table = build_delivery_boy_table(boy_head);
+    OrderNode**  ord_table      = build_order_table(ord_head, &ord_table_size);
+    if (!ord_table && ord_head) {
+        PRINT_ERROR("Memory allocation failed");
+        free_order_sll(ord_head);
+        free_delivery_boy_sll(boy_head);
+        return 1;
+    }
 
-    /* ── Dispatch ── */
+    const char* cmd = argv[1];
+
     if (strcmp(cmd, "update_status") == 0) {
         if (argc < 4) { PRINT_ERROR("Usage: update_status <order_id> <new_status>"); }
-        else cmd_update_status(argv[2], argv[3], ord_table, ord_table_size, ord_head);
+        else cmd_update_status(ord_table, ord_table_size, ord_head, argv[2], argv[3]);
 
     } else if (strcmp(cmd, "cancel_order") == 0) {
         if (argc < 3) { PRINT_ERROR("Usage: cancel_order <order_id>"); }
-        else cmd_cancel_order(argv[2], ord_table, ord_table_size, ord_head);
+        else cmd_cancel_order(ord_table, ord_table_size, ord_head, argv[2]);
 
     } else if (strcmp(cmd, "get_active_orders") == 0) {
-        cmd_get_active_orders(ord_head, boy_table);
+        cmd_get_active_orders(ord_head, boy_head);
 
     } else if (strcmp(cmd, "assign_agent") == 0) {
         if (argc < 4) { PRINT_ERROR("Usage: assign_agent <order_id> <boy_id>"); }
-        else cmd_assign_agent(argv[2], argv[3], ord_table, ord_table_size, ord_head);
+        else cmd_assign_agent(ord_table, ord_table_size, ord_head, argv[2], argv[3]);
 
     } else if (strcmp(cmd, "batch_promote_slot") == 0) {
         if (argc < 3) { PRINT_ERROR("Usage: batch_promote_slot <slot_name>"); }
-        else cmd_batch_promote_slot(argv[2], ord_head);
+        else cmd_batch_promote_slot(ord_head, argv[2]);
 
     } else if (strcmp(cmd, "list_all_orders") == 0) {
-        cmd_list_all_orders(ord_head, boy_table);
+        cmd_list_all_orders(ord_head, boy_head);
 
     } else if (strcmp(cmd, "list_all_orders_sorted") == 0) {
-        cmd_list_all_orders_sorted(ord_head, boy_table);
+        cmd_list_all_orders_sorted(ord_head, boy_head);
 
     } else {
         char err[MAX_STR_LEN];
@@ -416,9 +378,8 @@ int main(int argc, char* argv[]) {
         PRINT_ERROR(err);
     }
 
-    /* ── Teardown: free tables first, then the SLLs they pointed into ── */
+    /* Free all tables and SLLs */
     free(ord_table);
-    free(boy_table);
     free_order_sll(ord_head);
     free_delivery_boy_sll(boy_head);
 
