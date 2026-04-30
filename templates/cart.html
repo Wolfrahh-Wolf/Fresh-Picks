@@ -1088,7 +1088,9 @@ async function confirmPayment() {
                            /api/checkout response, so renderReceipt() works
                            without any modification.
                            ══════════════════════════════════════════════════ */
+                        checkoutResult = verifyData;
                         renderReceipt(verifyData);
+                        goToState(5);
                         resolve();
 
                     } catch (err) {
