@@ -304,7 +304,9 @@ function applySort() {
 function _renderVisible() {
     const container = document.getElementById("ordersContainer");
 
-    /* Collect all orders from the map */
+    /* Collect all orders from the map — Map preserves insertion order,
+       which matches the backend's slot-priority sort (Morning → Afternoon → Evening,
+       oldest timestamp first within each slot). */
     let orders = [..._adminOrderMap.values()];
 
     /* Filter */
@@ -312,12 +314,12 @@ function _renderVisible() {
         orders = orders.filter(o => o.status === _activeFilter);
     }
 
-    /* Sort by order_id numerically — mirrors min-heap priority (lowest ID = oldest) */
-    orders.sort((a, b) => {
-        const numA = parseInt(a.order_id.replace(/\D/g, "")) || 0;
-        const numB = parseInt(b.order_id.replace(/\D/g, "")) || 0;
-        return _sortAsc ? numA - numB : numB - numA;
-    });
+    /* Honour the user's sort toggle:
+         _sortAsc = true  → preserve backend order (slot-priority, oldest-first)
+         _sortAsc = false → reverse it ("Newest First" / Evening-last to first)       */
+    if (!_sortAsc) {
+        orders = orders.slice().reverse();
+    }
 
     /* Rebuild cards */
     container.innerHTML = "";

@@ -1,6 +1,26 @@
 /*
  * delivery.c - Fresh Picks: Post-Order Delivery Management (v4)
  * ==============================================================
+ * REFACTORED OUT OF order.c (Session 6)
+ * This binary handles everything that happens AFTER an order is placed:
+ *   - Updating order status (dispatch, deliver, cancel)
+ *   - Assigning / re-assigning delivery agents
+ *   - Fetching active orders for the delivery dashboard
+ *   - Batch slot promotion (JIT auto-dispatch)
+ *   - Cancellation with fee deduction logic
+ *
+ * Called by Flask (app.py) via subprocess.run() like this:
+ *   ./delivery <command> [arguments...]
+ *
+ * v4 MIGRATION NOTES:
+ *   - All data files are now binary .dat structs accessed via utils.c.
+ *   - Direct fopen/fread/fwrite/strtok over .txt files is FORBIDDEN.
+ *   - SLL loading/freeing is centralised in main(); cmd_ functions
+ *     receive pre-built pointer tables and SLL heads as arguments.
+ *   - Order lookups use O(1) build_order_table() / get_index_from_id().
+ *   - Delivery boy lookups retain O(N) SLL traversal (no table builder).
+ *
+ * ─────────────────────────────────────────────────────────────────
  * COMMANDS (argv[1]):
  *
  *   update_status <order_id> <new_status>
@@ -55,6 +75,15 @@ static int get_slot_priority(const char* slot) {
     if (strcmp(slot, "Morning")   == 0) return 1;
     if (strcmp(slot, "Afternoon") == 0) return 2;
     return 3;
+}
+
+/* qsort comparator: slot priority ASC, then timestamp ASC as tiebreaker */
+static int compare_orders_priority(const void* a, const void* b) {
+    const Order* oa = (const Order*)a;
+    const Order* ob = (const Order*)b;
+    if (oa->slot_priority != ob->slot_priority)
+        return oa->slot_priority - ob->slot_priority;
+    return strcmp(oa->timestamp, ob->timestamp);
 }
 
 
@@ -247,51 +276,51 @@ void cmd_list_all_orders(OrderNode* ord_head, DeliveryBoyNode* boy_head) {
     free(ptrs);
 }
 
-/* List all orders sorted by slot using priority queue Min-Heap. */
+/* Dump all orders sorted by slot priority then timestamp ASC, enriched with boy_name and boy_phone */
 void cmd_list_all_orders_sorted(OrderNode* ord_head, DeliveryBoyNode* boy_head) {
-
     int total = sll_count_orders(ord_head);
-
-    /* Capacity guard */
-    if (total > MAX_ORDERS) {
-        PRINT_ERROR("Order count exceeds MAX_ORDERS; heap cannot sort safely");
-        return;
-    }
-
     printf("SUCCESS|%d\n", total);
+
     if (total == 0) return;
 
-    MinHeap h = {0};
+    /* Copy SLL data into a flat array for qsort */
+    Order* arr = (Order*)malloc(sizeof(Order) * total);
+    if (!arr) return;
 
-    /* SLL traversal → heap population */
+    int        idx  = 0;
     OrderNode* curr = ord_head;
     while (curr != NULL) {
-        curr->data.slot_priority = get_slot_priority(curr->data.delivery_slot);
-        heap_insert(&h, curr->data);
+        arr[idx]               = curr->data;
+        arr[idx].slot_priority = get_slot_priority(curr->data.delivery_slot);
+        idx++;
         curr = curr->next;
     }
 
-    /* Extract-min → Morning→Afternoon→Evening emission */
-    Order temp;
-    while (heap_extract_min(&h, &temp)) {
+    qsort(arr, total, sizeof(Order), compare_orders_priority);
+
+    for (int i = 0; i < total; i++) {
         char boy_name [MAX_STR_LEN] = "Unknown";
         char boy_phone[MAX_STR_LEN] = "N/A";
-        find_boy_in_sll(boy_head, temp.delivery_boy_id, boy_name, boy_phone);
+        find_boy_in_sll(boy_head, arr[i].delivery_boy_id,
+                        boy_name, boy_phone);
 
         printf("%s|%s|%.2f|%s|%s|%s|%s|%s|%s|%s\n",
-            temp.order_id,
-            temp.user_id,
-            temp.total_amount,
-            temp.delivery_slot,
-            temp.delivery_boy_id,
-            temp.status,
-            temp.timestamp,
-            temp.items_string,
+            arr[i].order_id,
+            arr[i].user_id,
+            arr[i].total_amount,
+            arr[i].delivery_slot,
+            arr[i].delivery_boy_id,
+            arr[i].status,
+            arr[i].timestamp,
+            arr[i].items_string,
             boy_name,
             boy_phone
         );
     }
+
+    free(arr);
 }
+
 
 /* ═════════════════════════════════════════════════════════════
    SECTION 3: MAIN — Command Dispatcher
