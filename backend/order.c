@@ -1,7 +1,6 @@
 /*
- * order.c - Fresh Picks: Shopping Cart, Payment & Order Management (v4)
+ * order.c - Fresh Picks: Shopping Cart, Payment & Order Management (v5)
  * ======================================================================
- * This is the CORE C backend for the entire shopping flow.
  * Called by Flask (app.py) via subprocess.run() like this:
  *   ./order <command> [arguments...]
  *
@@ -13,7 +12,6 @@
  *   checkout      <uid> <slot>              → Full checkout pipeline
  *   get_orders    <uid>                     → All orders for one user
  *   update_order_status <order_id> <status> → Change status in orders.dat
- *   batch_promote_slot  <slot_name>         → Promote slot orders to OFD
  *   list_all_orders                         → All orders, newest-first
  *
  * Team: CodeCrafters | Project: Fresh Picks | SDP-1
@@ -23,7 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "models.h"   /* All structs, SLL node types, utils.c prototypes */
+#include "models.h"
 
 /* ═════════════════════════════════════════════════════════════
    SECTION 1: HELPER FUNCTIONS
@@ -557,7 +555,6 @@ void cmd_update_order_status(const char*  order_id,
  * Dump every order newest-first, enriched with delivery boy name and phone.
  * OUTPUT:  SUCCESS|<total_count>
  *          order_id|user_id|total|slot|boy_id|status|timestamp|items_string|boy_name|boy_phone
- * SCHEMA:  order_id|user_id|total|slot|boy_id|status|timestamp|items_string|boy_name|boy_phone
  */
 void cmd_list_all_orders(OrderNode*       ord_head,
                          int              total_count,
