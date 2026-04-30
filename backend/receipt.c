@@ -1,16 +1,10 @@
 /*
- * receipt.c - Fresh Picks: Order Receipt Data Extractor (v4)
- * ===========================================================
- * Standalone C binary.  Takes an order_id as the ONLY argument.
- * Looks up the order in orders.dat (via utils.c), then the user
- * in users.dat, then the delivery boy in delivery_boys.dat —
- * all through in-memory SLL traversal.
- *
- * v4 MIGRATION NOTES:
- *   - All data is now read through load_*_sll() / free_*_sll()
- *     from utils.c.  No direct fopen/strtok on .txt files.
- *   - The three former helper functions (find_order, find_user,
- *     find_delivery_boy) are reimplemented as SLL traversals.
+ * receipt.c - Fresh Picks: Order Receipt Data Extractor (v4 — Direct Indexing)
+ * =============================================================================
+ * Standalone C binary. Takes an order_id as the ONLY argument.
+ * Looks up the order via an OrderNode** pointer table (O(1)), then the user
+ * via a UserNode** pointer table (O(1)), then the delivery boy via linear
+ * SLL traversal (no pointer table available for DeliveryBoy).
  *
  * OUTPUT (single line to stdout):
  *   SUCCESS|order_id|user_id|full_name|user_phone|user_email|
@@ -36,74 +30,21 @@
 
 
 /* ═════════════════════════════════════════════════════════════
-   HELPER FUNCTIONS
+   HELPER FUNCTION
    ═════════════════════════════════════════════════════════════ */
 
-/*
- * FUNCTION: sll_find_order
- * PURPOSE:  Walk the already-loaded OrderNode SLL and fill `out` with
- *           the first Order whose order_id matches.
- * PARAMS:   head     — head of the loaded OrderNode SLL
- *           order_id — ID to search for (e.g. "ORD1001")
- *           out      — caller-provided Order struct to fill on match
- * OUTPUT:   (none — returns 1 on success, 0 if not found)
- * SCHEMA:   (none)
- */
-int sll_find_order(OrderNode* head, const char* order_id, Order* out) {
-    OrderNode* curr = head;
-    while (curr != NULL) {
-        if (strcmp(curr->data.order_id, order_id) == 0) {
-            *out = curr->data;
-            return 1;
-        }
-        curr = curr->next;
-    }
-    return 0;
-}
-
-/*
- * FUNCTION: sll_find_user
- * PURPOSE:  Walk the already-loaded UserNode SLL and fill `out` with
- *           the first User whose user_id matches.
- * PARAMS:   head    — head of the loaded UserNode SLL
- *           user_id — ID to search for (e.g. "U1001")
- *           out     — caller-provided User struct to fill on match
- * OUTPUT:   (none — returns 1 on success, 0 if not found)
- * SCHEMA:   (none)
- */
-int sll_find_user(UserNode* head, const char* user_id, User* out) {
-    UserNode* curr = head;
-    while (curr != NULL) {
-        if (strcmp(curr->data.user_id, user_id) == 0) {
-            *out = curr->data;
-            return 1;
-        }
-        curr = curr->next;
-    }
-    return 0;
-}
-
-/*
- * FUNCTION: sll_find_delivery_boy
- * PURPOSE:  Walk the already-loaded DeliveryBoyNode SLL and fill
- *           out_name / out_phone for the matching boy_id.
- *           Falls back to "Unknown" / "N/A" if not found.
- * PARAMS:   head      — head of the loaded DeliveryBoyNode SLL
- *           boy_id    — ID to search for (e.g. "D1001")
- *           out_name  — buffer for the boy's name
- *           out_phone — buffer for the boy's phone
- * OUTPUT:   (none — writes into out_name / out_phone)
- * SCHEMA:   (none)
- */
-void sll_find_delivery_boy(DeliveryBoyNode* head, const char* boy_id,
-                           char* out_name, char* out_phone) {
+/* Walk the DeliveryBoyNode SLL for boy_id; writes into out_name/out_phone,
+   falling back to "Unknown"/"N/A" if not found. Linear traversal is
+   intentional — no build_delivery_boy_table exists in utils.c. */
+void find_delivery_boy(DeliveryBoyNode* head, const char* boy_id,
+                       char* out_name, char* out_phone) {
     strncpy(out_name,  "Unknown", MAX_STR_LEN - 1);
     strncpy(out_phone, "N/A",     MAX_STR_LEN - 1);
     out_name [MAX_STR_LEN - 1] = '\0';
     out_phone[MAX_STR_LEN - 1] = '\0';
 
     DeliveryBoyNode* curr = head;
-    while (curr != NULL) {
+    while (curr) {
         if (strcmp(curr->data.boy_id, boy_id) == 0) {
             strncpy(out_name,  curr->data.name,  MAX_STR_LEN - 1);
             strncpy(out_phone, curr->data.phone, MAX_STR_LEN - 1);
@@ -120,19 +61,8 @@ void sll_find_delivery_boy(DeliveryBoyNode* head, const char* boy_id,
    MAIN
    ═════════════════════════════════════════════════════════════ */
 
-/*
- * FUNCTION: main
- * PURPOSE:  Entry point for the receipt binary.  Accepts one argument
- *           (order_id), loads all three SLLs, performs lookups, prints
- *           the unified receipt line to stdout.
- * PARAMS:   argc — must be 2; argv[1] — order_id string
- * OUTPUT:   SUCCESS|order_id|user_id|full_name|user_phone|user_email|
- *                   address|slot|status|timestamp|boy_name|boy_phone|
- *                   total|items_string
- *           ERROR|reason
- * SCHEMA:   order_id|user_id|full_name|user_phone|user_email|address|
- *           slot|status|timestamp|boy_name|boy_phone|total|items_string
- */
+/* Entry point: loads SLLs, builds pointer tables, performs lookups,
+   prints the unified receipt line, then frees all resources. */
 int main(int argc, char* argv[]) {
 
     if (argc < 2) {
@@ -142,51 +72,81 @@ int main(int argc, char* argv[]) {
 
     const char* order_id = argv[1];
 
-    /* ── Step 1: Load order SLL and find the order ───────────────── */
+    /* ── Load SLLs ───────────────────────────────────────────────── */
     OrderNode* ord_head = load_order_sll();
     if (!ord_head) {
         PRINT_ERROR("No orders found");
         return 1;
     }
 
-    Order order;
-    memset(&order, 0, sizeof(Order));
-    if (!sll_find_order(ord_head, order_id, &order)) {
-        free_order_sll(ord_head);
-        char err[MAX_STR_LEN];
-        snprintf(err, sizeof(err), "Order not found: %s", order_id);
-        PRINT_ERROR(err);
-        return 1;
-    }
-    free_order_sll(ord_head);
-
-    /* ── Step 2: Load user SLL and find the user ─────────────────── */
     UserNode* usr_head = load_user_sll();
     if (!usr_head) {
+        free_order_sll(ord_head);
         PRINT_ERROR("No users found");
         return 1;
     }
 
-    User user;
-    memset(&user, 0, sizeof(User));
-    if (!sll_find_user(usr_head, order.user_id, &user)) {
+    DeliveryBoyNode* boy_head = load_delivery_boy_sll();
+    /* boy_head may be NULL if no delivery boys are on file; find_delivery_boy
+       handles that gracefully by writing its fallback values immediately. */
+
+    /* ── Build pointer tables ────────────────────────────────────── */
+    int ord_max = 0;
+    OrderNode** ord_table = build_order_table(ord_head, &ord_max);
+    if (!ord_table) {
+        free_delivery_boy_sll(boy_head);
         free_user_sll(usr_head);
+        free_order_sll(ord_head);
+        PRINT_ERROR("Memory allocation failed");
+        return 1;
+    }
+
+    int usr_max = 0;
+    UserNode** usr_table = build_user_table(usr_head, &usr_max);
+    if (!usr_table) {
+        free(ord_table);
+        free_delivery_boy_sll(boy_head);
+        free_user_sll(usr_head);
+        free_order_sll(ord_head);
+        PRINT_ERROR("Memory allocation failed");
+        return 1;
+    }
+
+    /* ── Step 1: O(1) order lookup via pointer table ─────────────── */
+    int ord_idx = get_index_from_id(order_id);
+    if (ord_idx < 0 || ord_idx >= ord_max || !ord_table[ord_idx]) {
         char err[MAX_STR_LEN];
-        snprintf(err, sizeof(err), "User not found: %s", order.user_id);
+        snprintf(err, sizeof(err), "Order not found: %s", order_id);
+        free(usr_table);
+        free(ord_table);
+        free_delivery_boy_sll(boy_head);
+        free_user_sll(usr_head);
+        free_order_sll(ord_head);
         PRINT_ERROR(err);
         return 1;
     }
-    free_user_sll(usr_head);
+    OrderNode* ord_match = ord_table[ord_idx];
 
-    /* ── Step 3: Load delivery boy SLL and find the assigned boy ─── */
-    DeliveryBoyNode* boy_head = load_delivery_boy_sll();
+    /* ── Step 2: O(1) user lookup via pointer table ──────────────── */
+    int usr_idx = get_index_from_id(ord_match->data.user_id);
+    if (usr_idx < 0 || usr_idx >= usr_max || !usr_table[usr_idx]) {
+        char err[MAX_STR_LEN];
+        snprintf(err, sizeof(err), "User not found: %s", ord_match->data.user_id);
+        free(usr_table);
+        free(ord_table);
+        free_delivery_boy_sll(boy_head);
+        free_user_sll(usr_head);
+        free_order_sll(ord_head);
+        PRINT_ERROR(err);
+        return 1;
+    }
+    UserNode* usr_match = usr_table[usr_idx];
 
-    char boy_name [MAX_STR_LEN] = "Unknown";
-    char boy_phone[MAX_STR_LEN] = "N/A";
-    sll_find_delivery_boy(boy_head, order.delivery_boy_id,
-                          boy_name, boy_phone);
-
-    free_delivery_boy_sll(boy_head);
+    /* ── Step 3: Linear delivery boy lookup (no table available) ─── */
+    char boy_name [MAX_STR_LEN];
+    char boy_phone[MAX_STR_LEN];
+    find_delivery_boy(boy_head, ord_match->data.delivery_boy_id,
+                      boy_name, boy_phone);
 
     /*
      * ── Step 4: Print unified pipe-delimited receipt line ──────────
@@ -201,20 +161,27 @@ int main(int argc, char* argv[]) {
      *       Python splits on commas to render 4 address lines.
      */
     printf("SUCCESS|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%.2f|%s\n",
-        order.order_id,
-        order.user_id,
-        user.full_name,
-        user.phone,
-        user.email,
-        user.address,
-        order.delivery_slot,
-        order.status,
-        order.timestamp,
+        ord_match->data.order_id,
+        ord_match->data.user_id,
+        usr_match->data.full_name,
+        usr_match->data.phone,
+        usr_match->data.email,
+        usr_match->data.address,
+        ord_match->data.delivery_slot,
+        ord_match->data.status,
+        ord_match->data.timestamp,
         boy_name,
         boy_phone,
-        order.total_amount,
-        order.items_string
+        ord_match->data.total_amount,
+        ord_match->data.items_string
     );
+
+    /* ── Cleanup: tables first, then SLLs they point into ───────── */
+    free(usr_table);
+    free(ord_table);
+    free_delivery_boy_sll(boy_head);
+    free_user_sll(usr_head);
+    free_order_sll(ord_head);
 
     return 0;
 }
