@@ -662,6 +662,9 @@ async function updateStatus(orderId, newStatus, clickedBtn) {
         const data = await res.json();
 
         if (data.status === "SUCCESS") {
+            const orderData = _adminOrderMap.get(orderId);
+            if (orderData) orderData.status = newStatus;
+
             const cardEl = document.getElementById(`card-${orderId}`);
             const header = cardEl?.querySelector(".card-header");
 
@@ -711,6 +714,9 @@ async function markDelivered(orderId, clickedBtn) {
         const data = await res.json();
 
         if (data.status === "SUCCESS") {
+            const orderData = _adminOrderMap.get(orderId);
+            if (orderData) orderData.status = "Delivered";
+
             clickedBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Delivered ✔';
 
             const cardEl = document.getElementById(`card-${orderId}`);
