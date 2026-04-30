@@ -103,6 +103,7 @@ from flask import (
 
 from bridge import run_c_binary
 from generate_receipt import generate_receipt
+from flask_cors import CORS
 
 _rzp_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
@@ -114,6 +115,29 @@ app = Flask(
     template_folder="../templates",
     static_folder="../static"
 )
+
+def get_local_ip():
+    """
+    Detect the machine's active LAN/Wi-Fi IPv4 address without
+    sending any real traffic. Falls back to 127.0.0.1 on failure.
+    """
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+LOCAL_IP = get_local_ip()
+
+CORS(app, supports_credentials=True, origins=[
+    "http://localhost:5000",
+    "https://localhost:5000",
+    f"http://{LOCAL_IP}:5000",
+    f"https://{LOCAL_IP}:5000"
+])
 
 app.secret_key = "fresh_picks_secret_codecrafters_2026"
 
@@ -1590,21 +1614,21 @@ if __name__ == "__main__":
 
     import socket
 
-    def get_local_ip():
-        """
-        Detect the machine's active LAN/Wi-Fi IPv4 address without
-        sending any real traffic. Falls back to 127.0.0.1 on failure.
-        """
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except Exception:
-            return "127.0.0.1"
+    # def get_local_ip():
+    #     """
+    #     Detect the machine's active LAN/Wi-Fi IPv4 address without
+    #     sending any real traffic. Falls back to 127.0.0.1 on failure.
+    #     """
+    #     try:
+    #         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    #         s.connect(("8.8.8.8", 80))
+    #         ip = s.getsockname()[0]
+    #         s.close()
+    #         return ip
+    #     except Exception:
+    #         return "127.0.0.1"
 
-    LOCAL_IP = get_local_ip()
+    # LOCAL_IP = get_local_ip()
 
     print()
     print("=" * 62)

@@ -78,7 +78,7 @@
 .cart-progress-pulse { animation: fpPulse 1.4s ease-in-out infinite; }
 </style>
 
-<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+{# <script src="https://checkout.razorpay.com/v1/checkout.js"></script> #}
 
 {% endblock %}
 
@@ -1005,7 +1005,16 @@ async function confirmPayment() {
     }
 
     try {
-
+        /* ── Load Razorpay SDK on demand (only when user actually pays) ── */
+        await new Promise((res, rej) => {
+            if (window.Razorpay) return res();   // already loaded, skip
+            const s = document.createElement("script");
+            s.src = "https://checkout.razorpay.com/v1/checkout.js";
+            s.onload = res;
+            s.onerror = () => rej(new Error("Failed to load payment SDK. Check your internet connection."));
+            document.head.appendChild(s);
+        });
+        
         /* ══════════════════════════════════════════════════════════════════
            STEP A — Create Razorpay order on the server
            ══════════════════════════════════════════════════════════════════ */
