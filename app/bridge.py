@@ -92,11 +92,13 @@ def run_c_binary(executable_name, args_list):
         # text=True            -> returns strings instead of bytes
         # timeout=10           -> kill if takes more than 10 seconds
         # cwd=BACKEND_DIR      -> to run C binary INSIDE the backend folder
+        timeout_seconds = 60 if executable_name == "mailer" else 10
+
         result = subprocess.run(
             command,
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=timeout_seconds,
             cwd=BACKEND_DIR,
             env=env
         )

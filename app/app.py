@@ -86,9 +86,7 @@ import ssl
 import os
 import tempfile
 import sys
-import smtplib
 from datetime import datetime
-from email.message import EmailMessage
 
 from flask import (
     Flask,
@@ -258,59 +256,6 @@ def _generate_receipt_pdf(receipt_data):
         return tmp_path, None
     except Exception as e:
         return None, f"PDF generation failed: {str(e)}"
-
-
-def _send_receipt_email(receipt_data, pdf_path):
-    """
-    Send receipt PDF using SMTP credentials from environment variables.
-
-    Required:
-      FP_EMAIL_USER
-      FP_EMAIL_APP_PASSWORD
-
-    Optional:
-      FP_SMTP_HOST defaults to smtp.gmail.com
-      FP_SMTP_PORT defaults to 587
-    """
-    sender = os.environ.get("FP_EMAIL_USER", "").strip()
-    password = os.environ.get("FP_EMAIL_APP_PASSWORD", "").strip()
-    smtp_host = os.environ.get("FP_SMTP_HOST", "smtp.gmail.com").strip()
-    smtp_port = int(os.environ.get("FP_SMTP_PORT", "587"))
-
-    if not sender or not password:
-        return "Email sender is not configured. Set FP_EMAIL_USER and FP_EMAIL_APP_PASSWORD."
-
-    recipient = receipt_data.get("user_email", "").strip()
-    if not recipient:
-        return "Customer email address is missing for this order."
-
-    order_id = receipt_data.get("order_id", "order")
-    msg = EmailMessage()
-    msg["Subject"] = f"Fresh Picks Receipt - {order_id}"
-    msg["From"] = sender
-    msg["To"] = recipient
-    msg.set_content(
-        f"Hi {receipt_data.get('full_name', 'Customer')},\n\n"
-        f"Your Fresh Picks receipt for order {order_id} is attached.\n\n"
-        "Thank you for shopping with Fresh Picks.\n"
-    )
-
-    with open(pdf_path, "rb") as f:
-        msg.add_attachment(
-            f.read(),
-            maintype="application",
-            subtype="pdf",
-            filename=f"{order_id}_{receipt_data.get('user_id', 'customer')}.pdf"
-        )
-
-    try:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
-            server.starttls()
-            server.login(sender, password)
-            server.send_message(msg)
-        return None
-    except Exception as e:
-        return f"Email send failed: {str(e)}"
 
 
 # =============================================================
@@ -1275,19 +1220,28 @@ def api_email_receipt(order_id):
         return jsonify({"status": "ERROR", "message": error}), 500
 
     try:
-        error = _send_receipt_email(receipt_data, tmp_path)
+        result = run_c_binary("mailer", [
+            "send_receipt",
+            receipt_data.get("user_email", ""),
+            receipt_data.get("order_id", ""),
+            receipt_data.get("full_name", "Customer"),
+            tmp_path
+        ])
     finally:
         try:
             os.remove(tmp_path)
         except OSError:
             pass
 
-    if error:
-        return jsonify({"status": "ERROR", "message": error}), 500
+    if result["status"] != "SUCCESS":
+        return jsonify({
+            "status": "ERROR",
+            "message": result.get("data", "Could not email receipt")
+        }), 500
 
     return jsonify({
         "status": "SUCCESS",
-        "message": f"Receipt emailed to {receipt_data.get('user_email', '')}"
+        "message": result.get("data", f"Receipt emailed to {receipt_data.get('user_email', '')}")
     })
 
 

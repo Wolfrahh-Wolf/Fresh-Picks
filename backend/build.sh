@@ -26,29 +26,33 @@ fi
 echo "Using compiler: $CC"
 echo ""
 
-echo "[1/6] Compiling order..."
+echo "[1/7] Compiling order..."
 "$CC" -Wall -Wextra -o order order.c utils.c -lm
 echo "      order compiled successfully"
 
-echo "[2/6] Compiling auth..."
+echo "[2/7] Compiling auth..."
 "$CC" -Wall -Wextra -o auth auth.c utils.c -lm
 echo "      auth compiled successfully"
 
-echo "[3/6] Compiling inventory..."
+echo "[3/7] Compiling inventory..."
 "$CC" -Wall -Wextra -o inventory inventory.c utils.c -lm
 echo "      inventory compiled successfully"
 
-echo "[4/6] Compiling delivery..."
+echo "[4/7] Compiling delivery..."
 "$CC" -Wall -Wextra -o delivery delivery.c utils.c -lm
 echo "      delivery compiled successfully"
 
-echo "[5/6] Compiling receipt..."
+echo "[5/7] Compiling receipt..."
 "$CC" -Wall -Wextra -o receipt receipt.c utils.c -lm
 echo "      receipt compiled successfully"
 
-echo "[6/6] Compiling users..."
+echo "[6/7] Compiling users..."
 "$CC" -Wall -Wextra -o users users.c utils.c -lm
 echo "      users compiled successfully"
+
+echo "[7/7] Compiling mailer..."
+"$CC" -Wall -Wextra -o mailer mailer.c -lm
+echo "      mailer compiled successfully"
 
 echo ""
 echo "[Setup] Creating carts/ directory..."
