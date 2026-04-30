@@ -1,32 +1,6 @@
-/*
- * models.h - Fresh Picks: GLOBAL Source of Truth (v4 — Binary Storage Edition)
- * ==============================================================================
- * This header is the SINGLE file every .c file must include.
- * It defines:
- *   1. Constants (string lengths, file paths, max sizes)
- *   2. ALL entity structs (User, Vegetable, Order, FreeItem, DeliveryBoy, AdminCreds)
- *   3. SLL Node structs for each entity (used by utils.c for binary I/O)
- *   4. Pre-existing DS structs (CartNode, QueueNode, DeliveryNode, MinHeap)
- *   5. Function prototypes for utils.c (formerly ds_utils.c)
- *
- *
- * ID FORMAT STANDARD 
- *   Every ID has a PREFIX followed by exactly 4 digits.
- *     Users        → U1001, U1002, ...
- *     Admins       → A1001, A1002, ...
- *     Vegetables   → V1001, V1002, ...
- *     Free Items   → VF1001, VF1002, ...
- *     Orders       → ORD1001, ORD1002, ...
- *     Delivery Boys→ D1001, D1002, ...
- *
- * HOW TO USE: Add this line at the top of every .c file:
- *   #include "models.h"
- *
- * Team: CodeCrafters | Project: Fresh Picks | SDP-1
- */
+/* models.h - Fresh Picks: Global source of truth (v5 — Hybrid DS Edition) */
 
-
-#ifndef MODELS_H /* MODELS_H include guard */
+#ifndef MODELS_H
 #define MODELS_H
 
 #include <stdio.h>
@@ -34,9 +8,9 @@
 #include <string.h>
 
 
-/* ═════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    SECTION 1: SIZE CONSTANTS
-   ═════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 
 #define MAX_STR_LEN      128
 #define MAX_ID_LEN        20
@@ -45,7 +19,7 @@
 #define MAX_ORDERS       200
 #define MAX_DELIVERY_BOYS 20
 #define MAX_CART_ITEMS    50
-#define TIMESTAMP_LEN     32 
+#define TIMESTAMP_LEN     32
 
 /* ── Pointer-table sizing constants ── */
 #define ID_BASE            1001
@@ -57,6 +31,7 @@
 #define ORDER_GROWTH_SIZE   100
 #define USER_INIT_SIZE      100
 #define USER_GROWTH_SIZE     50
+
 
 /* ═══════════════════════════════════════════════════════════════
    SECTION 2: BINARY FILE PATH CONSTANTS
@@ -73,30 +48,20 @@
 #define DELIMITER         "|"
 
 
-/* ═════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    SECTION 3: OUTPUT MACROS
-   ALL C binaries must print results in one of these two formats
-   so bridge.py can split on '|' and parse status reliably.
-   ═════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 
-/* Usage: PRINT_SUCCESS("U1001")  →  prints: SUCCESS|U1001  */
 #define PRINT_SUCCESS(data)   printf("SUCCESS|%s\n", (data))
-
-/* Usage: PRINT_ERROR("Wrong password")  →  prints: ERROR|Wrong password  */
 #define PRINT_ERROR(reason)   printf("ERROR|%s\n",   (reason))
 
 
-/* ═════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    SECTION 4: ENTITY STRUCT DEFINITIONS
-   Fixed-size, pointer-free structs that are safe to fread/fwrite.
-   NO pointers inside any struct — binary I/O requires flat layout.
-   ═════════════════════════════════════════════════════════════ */
+   Fixed-size, pointer-free structs safe for fread/fwrite.
+   ═══════════════════════════════════════════════════════════════ */
 
-/* ─────────────────────────────────────────────
-   STRUCT: AdminCreds
-   DB Format: admin_id|username|password|admin_name|email
-   ID Format: A1001, A1002, ...
-   ───────────────────────────────────────────── */
+/* AdminCreds: one admin account row — ID format: A1001, A1002, ... */
 typedef struct {
     char admin_id[MAX_ID_LEN];
     char username[MAX_STR_LEN];
@@ -105,12 +70,7 @@ typedef struct {
     char email[MAX_STR_LEN];
 } AdminCreds;
 
-
-/* ─────────────────────────────────────────────
-   STRUCT: User
-   DB Format: user_id|username|password|full_name|email|phone|address
-   ID Format: U1001, U1002, ...
-   ───────────────────────────────────────────── */
+/* User: one customer account row — ID format: U1001, U1002, ... */
 typedef struct {
     char user_id[MAX_ID_LEN];
     char username[MAX_STR_LEN];
@@ -121,11 +81,7 @@ typedef struct {
     char address[MAX_ADD_LEN];
 } User;
 
-/* ─────────────────────────────────────────────
-   STRUCT: Vegetable
-   DB Format: veg_id|category|name|stock_g|price_per_1000g|tag|validity_days
-   ID Format: V1001, V1002, ...
-   ───────────────────────────────────────────── */
+/* Vegetable: one product row — ID format: V1001, V1002, ... */
 typedef struct {
     char  veg_id[MAX_ID_LEN];
     char  category[MAX_STR_LEN];
@@ -136,11 +92,7 @@ typedef struct {
     int   validity_days;
 } Vegetable;
 
-/* ─────────────────────────────────────────────
-   STRUCT: FreeItem
-   DB Format: vf_id|name|stock_g|min_trigger_amt|free_qty_g
-   ID Format: VF1001, VF1002, ...
-   ───────────────────────────────────────────── */
+/* FreeItem: one promotional freebie — ID format: VF1001, VF1002, ... */
 typedef struct {
     char  vf_id[MAX_ID_LEN];
     char  name[MAX_STR_LEN];
@@ -149,11 +101,7 @@ typedef struct {
     int   free_qty_g;
 } FreeItem;
 
-/* ─────────────────────────────────────────────
-   STRUCT: DeliveryBoy
-   DB Format: boy_id|name|phone|vehicle_no|is_active|last_assigned
-   ID Format: D1001, D1002, ...
-   ───────────────────────────────────────────── */
+/* DeliveryBoy: one delivery personnel row — ID format: D1001, D1002, ... */
 typedef struct {
     char boy_id[MAX_ID_LEN];
     char name[MAX_STR_LEN];
@@ -163,27 +111,18 @@ typedef struct {
     int  last_assigned;
 } DeliveryBoy;
 
-/* ─────────────────────────────────────────────
-   STRUCT: Order
-   One row loaded from orders.dat
-   DB Format: order_id|user_id|total|slot|boy_id|status|timestamp|items_string
-   ID Format: ORD1001, ORD1002, ...
-
-   items_string format (normalised in v4):
-     "V1001:Onion:500:40.00,VF1001:Curry Leaves:50:0.00"
-     Each token: veg_id:name:qty_g:price_at_order
-     price_at_order is a SNAPSHOT — never changes after placement.
-   ───────────────────────────────────────────── */
+/* Order: one order row — ID format: ORD1001, ORD1002, ...
+   items_string token format: veg_id:name:qty_g:price_at_order */
 typedef struct {
     char  order_id[MAX_ID_LEN];
     char  user_id[MAX_ID_LEN];
     float total_amount;
     char  delivery_slot[MAX_STR_LEN];
     char  delivery_boy_id[MAX_ID_LEN];
-    char  status[MAX_STR_LEN];        
-    char  timestamp[TIMESTAMP_LEN];   /* "YYYY-MM-DD HH:MM:SS"          */
+    char  status[MAX_STR_LEN];
+    char  timestamp[TIMESTAMP_LEN];
     char  items_string[MAX_LINE_LEN];
-    int   slot_priority;              /* 1=Morning, 2=Afternoon, 3=Evening */
+    int   slot_priority;             /* 1=Morning, 2=Afternoon, 3=Evening */
 } Order;
 
 
@@ -220,7 +159,6 @@ typedef struct AdminNode {
     AdminCreds       data;
     struct AdminNode *next;
 } AdminNode;
-
 
 
 /* ═══════════════════════════════════════════════════════════════
@@ -260,11 +198,11 @@ typedef struct DeliveryNode {
 } DeliveryNode;
 
 /* MinHeap: flat-array binary heap ordered by slot_priority (ascending) */
-/* 1=Morning, 2=Afternoon, 3=Evening */
 typedef struct {
     Order data[MAX_ORDERS];
     int   size;
 } MinHeap;
+
 
 /* ═══════════════════════════════════════════════════════════════
    SECTION 7: FUNCTION PROTOTYPES FOR utils.c
@@ -299,12 +237,12 @@ void             free_admin_sll(AdminNode* head);
 int  sll_count_orders(OrderNode* head);
 int  sll_count_users(UserNode* head);
 
-int            get_index_from_id(const char* id);
-UserNode**     build_user_table(UserNode* head, int* current_max_size);
-AdminNode**    build_admin_table(AdminNode* head);
-VegNode**      build_veg_table(VegNode* head);
+int          get_index_from_id(const char* id);
+UserNode**   build_user_table(UserNode* head, int* current_max_size);
+AdminNode**  build_admin_table(AdminNode* head);
+VegNode**    build_veg_table(VegNode* head);
 FreeItemNode** build_free_table(FreeItemNode* head);
-OrderNode**    build_order_table(OrderNode* head, int* current_max_size);
+OrderNode**  build_order_table(OrderNode* head, int* current_max_size);
 
 /* ── Doubly Linked List (Cart) ── */
 CartNode* dll_create_node(const char* veg_id, const char* name,
@@ -337,4 +275,4 @@ void heap_insert(MinHeap* h, Order o);
 int  heap_extract_min(MinHeap* h, Order* out);
 
 
-#endif /* End of MODELS_H include guard */
+#endif /* MODELS_H */
