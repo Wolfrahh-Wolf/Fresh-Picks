@@ -4,6 +4,15 @@
  * Called by Flask (app.py) via subprocess.run() like this:
  *   ./order <command> [arguments...]
  *
+ * v5 MIGRATION NOTES:
+ *   - All SLL load/free calls are now centralised in main().
+ *   - Pointer Tables (VegNode**, OrderNode**, FreeItemNode**) overlay the
+ *     SLLs in RAM for O(1) direct-index lookups via get_index_from_id().
+ *   - DeliveryBoy lookups remain O(N) via find_boy_in_sll() — no table
+ *     exists for that entity (4-record dataset, CLL assignment).
+ *   - cmd_ signatures updated to accept tables + sizes instead of
+ *     performing their own I/O.
+ *
  * COMMANDS (argv[1]):
  *   list_products                           → Read veg SLL, print all
  *   add_to_cart   <uid> <vid> <grams>       → Add/update item in cart DLL
@@ -14,6 +23,9 @@
  *   update_order_status <order_id> <status> → Change status in orders.dat
  *   list_all_orders                         → All orders, newest-first
  *
+ * CART FILES (only permitted direct I/O — Rule 10):
+ *   carts/<user_id>_cart.txt  pipe-delimited, per-session temporary data.
+ *
  * Team: CodeCrafters | Project: Fresh Picks | SDP-1
  */
 
@@ -21,7 +33,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "models.h"
+#include "models.h"   /* All structs, SLL node types, utils.c prototypes */
+
 
 /* ═════════════════════════════════════════════════════════════
    SECTION 1: HELPER FUNCTIONS
@@ -130,27 +143,27 @@ void save_cart_to_file(const char* user_id, CartNode* head) {
 
 /*
  * If cart_total >= Rs.500, append free items to the cart DLL using the
- * already-loaded free_item_head SLL and free_item_table for O(1) stock access.
+ * already-loaded fi_head SLL and fi_table for O(1) stock access.
  * multiplier = (int)(cart_total / 500); final_free_qty_g = multiplier * free_qty_g
- * Caller (main) owns free_item_head lifetime; saves SLL only when modified.
+ * Caller (main) owns fi_head lifetime; saves SLL only when modified.
  */
 void check_and_apply_freebies(CartNode**     head,
                                float          cart_total,
-                               FreeItemNode*  free_item_head,
-                               FreeItemNode** free_item_table,
-                               int            free_item_table_size) {
+                               FreeItemNode*  fi_head,
+                               FreeItemNode** fi_table,
+                               int            fi_table_size) {
     if (cart_total < 500.0f) return;
-    if (!free_item_head)            return;
+    if (!fi_head)            return;
 
-    /* free_item_table / free_item_table_size reserved for future O(1) stock lookups;
-       current dataset is small so we traverse free_item_head directly. */
-    (void)free_item_table;
-    (void)free_item_table_size;
+    /* fi_table / fi_table_size reserved for future O(1) stock lookups;
+       current dataset is small so we traverse fi_head directly. */
+    (void)fi_table;
+    (void)fi_table_size;
 
     int multiplier = (int)(cart_total / 500.0f);
     int modified   = 0;
 
-    FreeItemNode* curr = free_item_head;
+    FreeItemNode* curr = fi_head;
     while (curr != NULL) {
         if (cart_total < curr->data.min_trigger_amt) {
             curr = curr->next;
@@ -177,7 +190,7 @@ void check_and_apply_freebies(CartNode**     head,
     }
 
     if (modified)
-        save_free_item_sll(free_item_head);
+        save_free_item_sll(fi_head);
 }
 
 
@@ -189,6 +202,7 @@ void check_and_apply_freebies(CartNode**     head,
  * Print every product from the already-loaded veg SLL.
  * OUTPUT:  SUCCESS|
  *          veg_id|category|name|stock_g|price_per_1000g|tag|validity_days
+ * SCHEMA:  veg_id|category|name|stock_g|price_per_1000g|tag|validity_days
  */
 void cmd_list_products(VegNode* veg_head) {
     if (!veg_head) {
@@ -218,6 +232,7 @@ void cmd_list_products(VegNode* veg_head) {
  * Uses O(1) veg_table lookup instead of linear SLL walk.
  * OUTPUT:  SUCCESS|Item added to cart
  *          ERROR|reason
+ * SCHEMA:  SUCCESS|Item added to cart
  */
 void cmd_add_to_cart(const char*  user_id,
                      const char*  veg_id,
@@ -267,6 +282,7 @@ void cmd_add_to_cart(const char*  user_id,
  * Load the user's cart DLL and print all items plus grand total.
  * OUTPUT:  SUCCESS|<grand_total>
  *          veg_id|name|qty_g|price_per_1000g|item_total|is_free
+ * SCHEMA:  veg_id|name|qty_g|price_per_1000g|item_total|is_free
  */
 void cmd_view_cart(const char* user_id) {
     CartNode* head  = load_cart_from_file(user_id);
@@ -292,6 +308,7 @@ void cmd_view_cart(const char* user_id) {
 /*
  * Remove one item from the cart DLL by veg_id, then persist.
  * OUTPUT:  SUCCESS|Item removed from cart
+ * SCHEMA:  SUCCESS|Item removed from cart
  */
 void cmd_remove_item(const char* user_id, const char* veg_id) {
     CartNode* head = load_cart_from_file(user_id);
@@ -307,6 +324,7 @@ void cmd_remove_item(const char* user_id, const char* veg_id) {
  * Receives pre-loaded tables from main(); generates order ID from ord_count.
  * OUTPUT:  SUCCESS|order_id|total|slot|boy_name|boy_phone|items_string
  *          ERROR|reason
+ * SCHEMA:  order_id|total|slot|boy_name|boy_phone|items_string
  */
 void cmd_checkout(const char*      user_id,
                   const char*      slot,
@@ -315,9 +333,9 @@ void cmd_checkout(const char*      user_id,
                   int              veg_table_size,
                   OrderNode*       ord_head,
                   int              ord_count,
-                  FreeItemNode*    free_item_head,
-                  FreeItemNode**   free_item_table,
-                  int              free_item_table_size,
+                  FreeItemNode*    fi_head,
+                  FreeItemNode**   fi_table,
+                  int              fi_table_size,
                   DeliveryBoyNode* boy_sll) {
 
     /* ── Step 1: Load cart ─────────────────────────────────────── */
@@ -366,7 +384,7 @@ void cmd_checkout(const char*      user_id,
     }
 
     /* ── Step 4: Apply freebies (multiplier logic) ─────────────── */
-    check_and_apply_freebies(&head, total, free_item_head, free_item_table, free_item_table_size);
+    check_and_apply_freebies(&head, total, fi_head, fi_table, fi_table_size);
     total = dll_get_total(head);
 
     /* ── Step 5: Deduct stock for all paid items (O(1) per item) ── */
@@ -489,6 +507,7 @@ void cmd_checkout(const char*      user_id,
  * Uses O(1) order_table lookup to skip non-matching entries efficiently.
  * OUTPUT:  SUCCESS|
  *          order_id|user_id|total|slot|boy_id|status|timestamp|items_string|boy_name|boy_phone
+ * SCHEMA:  order_id|user_id|total|slot|boy_id|status|timestamp|items_string|boy_name|boy_phone
  */
 void cmd_get_orders(const char*      user_id,
                     OrderNode*       ord_head,
@@ -525,6 +544,7 @@ void cmd_get_orders(const char*      user_id,
  * Change the status of one specific order using O(1) order_table lookup.
  * OUTPUT:  SUCCESS|Status updated
  *          ERROR|Order not found
+ * SCHEMA:  SUCCESS|Status updated
  */
 void cmd_update_order_status(const char*  order_id,
                              const char*  new_status,
@@ -555,6 +575,7 @@ void cmd_update_order_status(const char*  order_id,
  * Dump every order newest-first, enriched with delivery boy name and phone.
  * OUTPUT:  SUCCESS|<total_count>
  *          order_id|user_id|total|slot|boy_id|status|timestamp|items_string|boy_name|boy_phone
+ * SCHEMA:  order_id|user_id|total|slot|boy_id|status|timestamp|items_string|boy_name|boy_phone
  */
 void cmd_list_all_orders(OrderNode*       ord_head,
                          int              total_count,
@@ -619,7 +640,7 @@ int main(int argc, char* argv[]) {
     /* ── Load all SLLs ─────────────────────────────────────────── */
     VegNode*         veg_head = load_veg_sll();
     OrderNode*       ord_head = load_order_sll();
-    FreeItemNode*    free_item_head  = load_free_item_sll();
+    FreeItemNode*    fi_head  = load_free_item_sll();
     DeliveryBoyNode* boy_head = load_delivery_boy_sll();
 
     /* ── Build Pointer Tables ──────────────────────────────────── */
@@ -629,8 +650,8 @@ int main(int argc, char* argv[]) {
     int ord_table_size = 0;
     OrderNode** ord_table = build_order_table(ord_head, &ord_table_size);
 
-    int free_item_table_size = 0;
-    FreeItemNode** free_item_table = build_free_table(free_item_head, &free_item_table_size);
+    int fi_table_size = 0;
+    FreeItemNode** fi_table = build_free_table(fi_head, &fi_table_size);
 
     /* ── Pre-compute order count for checkout ID generation ─────── */
     int ord_count = sll_count_orders(ord_head);
@@ -657,7 +678,7 @@ int main(int argc, char* argv[]) {
         cmd_checkout(argv[2], argv[3],
                      veg_head,  veg_table, veg_table_size,
                      ord_head,  ord_count,
-                     free_item_head,   free_item_table,  free_item_table_size,
+                     fi_head,   fi_table,  fi_table_size,
                      boy_head);
 
     } else if (strcmp(cmd, "get_orders") == 0) {
@@ -682,12 +703,12 @@ cleanup:
     /* ── Free all Pointer Tables ───────────────────────────────── */
     free(veg_table);
     free(ord_table);
-    free(free_item_table);
+    free(fi_table);
 
     /* ── Free all SLLs ─────────────────────────────────────────── */
     free_veg_sll(veg_head);
     free_order_sll(ord_head);
-    free_free_item_sll(free_item_head);
+    free_free_item_sll(fi_head);
     free_delivery_boy_sll(boy_head);
 
     return 0;

@@ -1,18 +1,23 @@
 /*
- * auth.c - Fresh Picks: Authentication & Profile Logic (v4 — Binary Storage)
+ * auth.c - Fresh Picks: Authentication & Profile Logic (v5 — Direct Indexing)
  * ===========================================================================
  * Called by Flask via subprocess.run(): ./auth <action> [arg1] [arg2] ...
+ *
+ * ARCHITECTURE: SLLs are the persistent source of truth. Pointer tables
+ * (UserNode**, AdminNode**) are built once in main() for O(1) lookups.
+ * All load/free calls live exclusively in main(); cmd_ functions receive
+ * pre-built tables and the SLL head (needed by save_*_sll on writes).
  *
  * OUTPUT CONTRACT: Always "SUCCESS|<data>" or "ERROR|<reason>".
  *
  * COMMANDS (argv[1]):
- *   login_user       <username> <password>
- *   login_admin      <username> <password>
- *   register         <username> <password> <full_name> <email> <phone> <address>
- *   get_profile      <user_id>
- *   change_pass_user <user_id> <old_password> <new_password>
- *   change_pass_admin<admin_id> <old_password> <new_password>
- *   update_profile   <user_id> <field> <new_value>
+ *   login_user        <username> <password>
+ *   login_admin       <username> <password>
+ *   register          <username> <password> <full_name> <email> <phone> <address>
+ *   get_profile       <user_id>
+ *   change_pass_user  <user_id> <old_password> <new_password>
+ *   change_pass_admin <admin_id> <old_password> <new_password>
+ *   update_profile    <user_id> <field> <new_value>
  *
  * Team: CodeCrafters | Project: Fresh Picks | SDP-1
  */

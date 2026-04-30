@@ -2,6 +2,12 @@
  * inventory.c - Fresh Picks: Admin Inventory Management (v5 — Direct Indexing)
  * =============================================================================
  * Called by Flask via subprocess.run(): ./inventory <command> [arguments...]
+ *
+ * ARCHITECTURE: SLLs are the persistent source of truth. Pointer tables
+ * (VegNode**, FreeItemNode**) are built once in main() for O(1) lookups.
+ * All load/free calls live exclusively in main(); cmd_ functions receive
+ * pre-built tables, their sizes, and the SLL head for save calls on writes.
+ *
  * OUTPUT CONTRACT: Always "SUCCESS|message" or "ERROR|reason".
  *
  * COMMANDS (argv[1]):
@@ -12,11 +18,10 @@
  * Team: CodeCrafters | Project: Fresh Picks | SDP-1
  */
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "models.h" 
+#include "models.h"
 
 
 /* cmd_update_stock — O(1) lookup by veg_id, update fields, persist */

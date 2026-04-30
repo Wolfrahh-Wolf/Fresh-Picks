@@ -1,38 +1,5 @@
 /*
- * delivery.c - Fresh Picks: Post-Order Delivery Management 
- * ==============================================================
- * COMMANDS (argv[1]):
- *
- *   update_status <order_id> <new_status>
- *     → Change the status field of one order in orders.dat.
- *       Valid values: "Order Placed", "Out for Delivery",
- *                     "Delivered", "Cancelled"
- *
- *   cancel_order <order_id>
- *     → Set status to "Cancelled". Only "Order Placed" orders
- *       may be cancelled. ₹50 fee note handled at Flask/UI level.
- *
- *   get_active_orders
- *     → Dump all orders whose status is "Order Placed" or
- *       "Out for Delivery". Used by the delivery dashboard.
- *       Output: SUCCESS|<count> then one row per line.
- *
- *   assign_agent <order_id> <boy_id>
- *     → Override the delivery_boy_id on one specific order.
- *
- *   batch_promote_slot <slot_name>
- *     → Flip all "Order Placed" orders for a given slot to
- *       "Out for Delivery". Returns the count promoted.
- *
- *   list_all_orders
- *     → Dump EVERY order, newest-first, with boy_name + boy_phone
- *       joined from delivery_boys.dat. Used by admin full-view.
- *
- *   list_all_orders_sorted
- *     → Dump ALL orders sorted by slot priority (Morning first),
- *       then timestamp ASC as tiebreaker.
- *
- * Team: CodeCrafters | Project: Fresh Picks | SDP-1
+ * delivery.c - Fresh Picks: Post-Order Delivery Management (v4 — Direct Indexing Edition)
  */
 
 #include <stdio.h>

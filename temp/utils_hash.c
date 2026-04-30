@@ -1,34 +1,4 @@
-/*
- * utils.c - Fresh Picks: Data Structure & Binary I/O Utility Library
- * ===================================================================
- *
- * FILE LOADING:
- *   Each entity (User, Vegetable, Order, FreeItem, DeliveryBoy, AdminCreds)
- *   gets three functions:
- *     load_<entity>_sll()  — fread structs from .dat into an in-memory SLL
- *     save_<entity>_sll()  — fwrite the entire SLL back to the .dat file
- *     free_<entity>_sll()  — walk and free every heap-allocated node
- *
- * FILE LOCKING STRATEGY:
- *   load uses LOCK_SH (shared read lock)  — multiple readers allowed.
- *   save uses LOCK_EX (exclusive write lock) — one writer at a time.
- *   This prevents data corruption when multiple users place orders
- *   or the admin updates stock simultaneously via Flask's multi-thread mode.
- *
- * HOW TO USE (in any business-logic .c file):
- *   1. Load:   VegNode* vegs = load_veg_sll();
- *   2. Modify: traverse the SLL and update fields in-memory.
- *   3. Save:   save_veg_sll(vegs);
- *   4. Free:   free_veg_sll(vegs);
- *
- * COMPILE:
- *   Always link utils.c alongside the business-logic file:
- *     gcc -Wall -Wextra -o order order.c utils.c -lm
- *
- * Team: CodeCrafters | Project: Fresh Picks | SDP-1
- */
-
-
+/* utils.c - Fresh Picks: Data Structure & Binary I/O Utility Library */
 
 #include <io.h>
 #include <sys/locking.h>
@@ -38,19 +8,7 @@
 #include <ctype.h>
 #include "models.h"
 
- /* ══════════════════════════════════════════════════════════════
-   WINDOWS File Locking Macros
-   ══════════════════════════════════════════════════════════════ */
-/* ══════════════════════════════════════════════════════════════
-   INTERNAL HELPER MACROS (used only inside this file)
-
-   SLL_LOAD_OPEN(filepath, fp)
-     Opens the .dat file for reading. Returns NULL on failure.
-
-   SLL_SAVE_OPEN(filepath, fp)
-     Opens the .dat file for writing (truncates). Returns on failure.
-   ══════════════════════════════════════════════════════════════ */
-
+/* ── Windows file-locking macros (replaces Linux flock) ── */
 #define SLL_LOAD_OPEN(filepath, fp)                     \
     do {                                                \
         (fp) = fopen((filepath), "rb");                 \
@@ -76,7 +34,7 @@
    DATA STRUCTURE 5A: USER SLL  —  Persistent store: users.dat
    ══════════════════════════════════════════════════════════════ */
 
-/* Read users.dat into a SLL; caller must free */
+/* FUNCTION: load_user_sll - Read users.dat into a SLL; caller must free */
 UserNode* load_user_sll(void) {
     FILE* fp;
     SLL_LOAD_OPEN(USERS_FILE, fp);
@@ -100,7 +58,7 @@ UserNode* load_user_sll(void) {
     return head;
 }
 
-/* Overwrite users.dat with the current SLL */
+/* FUNCTION: save_user_sll - Overwrite users.dat with the current SLL */
 void save_user_sll(UserNode* head) {
     FILE* fp;
     SLL_SAVE_OPEN(USERS_FILE, fp);
@@ -114,7 +72,7 @@ void save_user_sll(UserNode* head) {
     SLL_CLOSE(fp);
 }
 
-/* Walk and free every heap-allocated UserNode */
+/* FUNCTION: free_user_sll - Walk and free every heap-allocated UserNode */
 void free_user_sll(UserNode* head) {
     UserNode* curr = head;
     while (curr) {
@@ -124,11 +82,12 @@ void free_user_sll(UserNode* head) {
     }
 }
 
+
 /* ══════════════════════════════════════════════════════════════
    DATA STRUCTURE 5B: VEGETABLE SLL  —  Persistent store: products.dat
    ══════════════════════════════════════════════════════════════ */
 
-/* Read products.dat into a SLL; caller must free */
+/* FUNCTION: load_veg_sll - Read products.dat into a SLL; caller must free */
 VegNode* load_veg_sll(void) {
     FILE* fp;
     SLL_LOAD_OPEN(PRODUCTS_FILE, fp);
@@ -152,7 +111,7 @@ VegNode* load_veg_sll(void) {
     return head;
 }
 
-/* Overwrite products.dat with the current SLL */
+/* FUNCTION: save_veg_sll - Overwrite products.dat with the current SLL */
 void save_veg_sll(VegNode* head) {
     FILE* fp;
     SLL_SAVE_OPEN(PRODUCTS_FILE, fp);
@@ -166,7 +125,7 @@ void save_veg_sll(VegNode* head) {
     SLL_CLOSE(fp);
 }
 
-/* Walk and free every heap-allocated VegNode */
+/* FUNCTION: free_veg_sll - Walk and free every heap-allocated VegNode */
 void free_veg_sll(VegNode* head) {
     VegNode* curr = head;
     while (curr) {
@@ -181,7 +140,7 @@ void free_veg_sll(VegNode* head) {
    DATA STRUCTURE 5C: ORDER SLL  —  Persistent store: orders.dat
    ══════════════════════════════════════════════════════════════ */
 
-/* Read orders.dat into a SLL; caller must free */
+/* FUNCTION: load_order_sll - Read orders.dat into a SLL; caller must free */
 OrderNode* load_order_sll(void) {
     FILE* fp;
     SLL_LOAD_OPEN(ORDERS_FILE, fp);
@@ -205,7 +164,7 @@ OrderNode* load_order_sll(void) {
     return head;
 }
 
-/* Overwrite orders.dat with the current SLL */
+/* FUNCTION: save_order_sll - Overwrite orders.dat with the current SLL */
 void save_order_sll(OrderNode* head) {
     FILE* fp;
     SLL_SAVE_OPEN(ORDERS_FILE, fp);
@@ -219,7 +178,7 @@ void save_order_sll(OrderNode* head) {
     SLL_CLOSE(fp);
 }
 
-/* Walk and free every heap-allocated OrderNode */
+/* FUNCTION: free_order_sll - Walk and free every heap-allocated OrderNode */
 void free_order_sll(OrderNode* head) {
     OrderNode* curr = head;
     while (curr) {
@@ -234,7 +193,7 @@ void free_order_sll(OrderNode* head) {
    DATA STRUCTURE 5D: FREE ITEM SLL  —  Persistent store: free_inventory.dat
    ══════════════════════════════════════════════════════════════ */
 
-/* Read free_inventory.dat into a SLL; caller must free */
+/* FUNCTION: load_free_item_sll - Read free_inventory.dat into a SLL; caller must free */
 FreeItemNode* load_free_item_sll(void) {
     FILE* fp;
     SLL_LOAD_OPEN(FREE_INV_FILE, fp);
@@ -258,7 +217,7 @@ FreeItemNode* load_free_item_sll(void) {
     return head;
 }
 
-/* Overwrite free_inventory.dat with the current SLL */
+/* FUNCTION: save_free_item_sll - Overwrite free_inventory.dat with the current SLL */
 void save_free_item_sll(FreeItemNode* head) {
     FILE* fp;
     SLL_SAVE_OPEN(FREE_INV_FILE, fp);
@@ -272,7 +231,7 @@ void save_free_item_sll(FreeItemNode* head) {
     SLL_CLOSE(fp);
 }
 
-/* Walk and free every heap-allocated FreeItemNode */
+/* FUNCTION: free_free_item_sll - Walk and free every heap-allocated FreeItemNode */
 void free_free_item_sll(FreeItemNode* head) {
     FreeItemNode* curr = head;
     while (curr) {
@@ -287,7 +246,7 @@ void free_free_item_sll(FreeItemNode* head) {
    DATA STRUCTURE 5E: DELIVERY BOY SLL  —  Persistent store: delivery_boys.dat
    ══════════════════════════════════════════════════════════════ */
 
-/* Read delivery_boys.dat into a SLL; caller must free */
+/* FUNCTION: load_delivery_boy_sll - Read delivery_boys.dat into a SLL; caller must free */
 DeliveryBoyNode* load_delivery_boy_sll(void) {
     FILE* fp;
     SLL_LOAD_OPEN(DELIVERY_FILE, fp);
@@ -311,7 +270,7 @@ DeliveryBoyNode* load_delivery_boy_sll(void) {
     return head;
 }
 
-/* Overwrite delivery_boys.dat with the current SLL */
+/* FUNCTION: save_delivery_boy_sll - Overwrite delivery_boys.dat with the current SLL */
 void save_delivery_boy_sll(DeliveryBoyNode* head) {
     FILE* fp;
     SLL_SAVE_OPEN(DELIVERY_FILE, fp);
@@ -325,7 +284,7 @@ void save_delivery_boy_sll(DeliveryBoyNode* head) {
     SLL_CLOSE(fp);
 }
 
-/* Walk and free every heap-allocated DeliveryBoyNode */
+/* FUNCTION: free_delivery_boy_sll - Walk and free every heap-allocated DeliveryBoyNode */
 void free_delivery_boy_sll(DeliveryBoyNode* head) {
     DeliveryBoyNode* curr = head;
     while (curr) {
@@ -340,7 +299,7 @@ void free_delivery_boy_sll(DeliveryBoyNode* head) {
    DATA STRUCTURE 5F: ADMIN SLL  —  Persistent store: admin_creds.dat
    ══════════════════════════════════════════════════════════════ */
 
-/* Read admin_creds.dat into a SLL; caller must free */
+/* FUNCTION: load_admin_sll - Read admin_creds.dat into a SLL; caller must free */
 AdminNode* load_admin_sll(void) {
     FILE* fp;
     SLL_LOAD_OPEN(ADMIN_FILE, fp);
@@ -364,7 +323,7 @@ AdminNode* load_admin_sll(void) {
     return head;
 }
 
-/* Overwrite admin_creds.dat with the current SLL */
+/* FUNCTION: save_admin_sll - Overwrite admin_creds.dat with the current SLL */
 void save_admin_sll(AdminNode* head) {
     FILE* fp;
     SLL_SAVE_OPEN(ADMIN_FILE, fp);
@@ -378,7 +337,7 @@ void save_admin_sll(AdminNode* head) {
     SLL_CLOSE(fp);
 }
 
-/* Walk and free every heap-allocated AdminNode */
+/* FUNCTION: free_admin_sll - Walk and free every heap-allocated AdminNode */
 void free_admin_sll(AdminNode* head) {
     AdminNode* curr = head;
     while (curr) {
@@ -388,11 +347,12 @@ void free_admin_sll(AdminNode* head) {
     }
 }
 
+
 /* ══════════════════════════════════════════════════════════════
    SLL UTILITY HELPERS
    ══════════════════════════════════════════════════════════════ */
 
-/* Return the number of nodes in an OrderNode SLL */
+/* FUNCTION: sll_count_orders - Return the number of nodes in an OrderNode SLL */
 int sll_count_orders(OrderNode* head) {
     int count = 0;
     OrderNode* curr = head;
@@ -400,7 +360,7 @@ int sll_count_orders(OrderNode* head) {
     return count;
 }
 
-/* Return the number of nodes in a UserNode SLL */
+/* FUNCTION: sll_count_users - Return the number of nodes in a UserNode SLL */
 int sll_count_users(UserNode* head) {
     int count = 0;
     UserNode* curr = head;
@@ -408,13 +368,13 @@ int sll_count_users(UserNode* head) {
     return count;
 }
 
-/* Skip alphabetical prefix, return numeric part minus ID_BASE */
+/* FUNCTION: get_index_from_id - Skip alphabetical prefix, return numeric part minus ID_BASE */
 int get_index_from_id(const char* id) {
     while (*id && isalpha((unsigned char)*id)) id++;  /* advance past prefix chars */
     return atoi(id) - ID_BASE;
 }
 
-/* Build a direct-index pointer table from the User SLL;
+/* FUNCTION: build_user_table - Build a direct-index pointer table from the User SLL;
    grows by USER_GROWTH_SIZE if needed and updates *current_max_size */
 UserNode** build_user_table(UserNode* head, int* current_max_size) {
     *current_max_size = USER_INIT_SIZE;
@@ -443,7 +403,7 @@ UserNode** build_user_table(UserNode* head, int* current_max_size) {
     return table;
 }
 
-/* Build a fixed direct-index pointer table from the Admin SLL */
+/* FUNCTION: build_admin_table - Build a fixed direct-index pointer table from the Admin SLL */
 AdminNode** build_admin_table(AdminNode* head) {
     AdminNode** table = (AdminNode**)calloc(ADMIN_TABLE_SIZE, sizeof(AdminNode*));
     if (!table) return NULL;
@@ -459,10 +419,9 @@ AdminNode** build_admin_table(AdminNode* head) {
     return table;
 }
 
-/* Build a fixed direct-index pointer table from the Vegetable SLL */
-VegNode** build_veg_table(VegNode* head, int* table_size) {
-    *table_size = VEG_TABLE_SIZE;
-    VegNode** table = (VegNode**)calloc(*table_size, sizeof(VegNode*));
+/* FUNCTION: build_veg_table - Build a fixed direct-index pointer table from the Vegetable SLL */
+VegNode** build_veg_table(VegNode* head) {
+    VegNode** table = (VegNode**)calloc(VEG_TABLE_SIZE, sizeof(VegNode*));
     if (!table) return NULL;
 
     VegNode* curr = head;
@@ -476,10 +435,9 @@ VegNode** build_veg_table(VegNode* head, int* table_size) {
     return table;
 }
 
-/* Build a fixed direct-index pointer table from the FreeItem SLL */
-FreeItemNode** build_free_table(FreeItemNode* head, int* table_size) {
-    *table_size = FREE_TABLE_SIZE; // Assign the constant to the pointer
-    FreeItemNode** table = (FreeItemNode**)calloc(*table_size, sizeof(FreeItemNode*));
+/* FUNCTION: build_free_table - Build a fixed direct-index pointer table from the FreeItem SLL */
+FreeItemNode** build_free_table(FreeItemNode* head) {
+    FreeItemNode** table = (FreeItemNode**)calloc(FREE_TABLE_SIZE, sizeof(FreeItemNode*));
     if (!table) return NULL;
 
     FreeItemNode* curr = head;
@@ -493,7 +451,7 @@ FreeItemNode** build_free_table(FreeItemNode* head, int* table_size) {
     return table;
 }
 
-/* Build a direct-index pointer table from the Order SLL;
+/* FUNCTION: build_order_table - Build a direct-index pointer table from the Order SLL;
    grows by ORDER_GROWTH_SIZE if needed and updates *current_max_size */
 OrderNode** build_order_table(OrderNode* head, int* current_max_size) {
     *current_max_size = ORDER_TABLE_SIZE;
@@ -527,7 +485,7 @@ OrderNode** build_order_table(OrderNode* head, int* current_max_size) {
    DATA STRUCTURE 1: DOUBLY LINKED LIST (Cart)
    ══════════════════════════════════════════════════════════════ */
 
-/* Allocate and initialise a new CartNode; returns NULL on failure */
+/* FUNCTION: dll_create_node - Allocate and initialise a new CartNode; returns NULL on failure */
 CartNode* dll_create_node(const char* veg_id, const char* name,
                           int qty_g, float price_per_1000g, int is_free) {
     CartNode* node = (CartNode*)malloc(sizeof(CartNode));
@@ -548,7 +506,7 @@ CartNode* dll_create_node(const char* veg_id, const char* name,
     return node;
 }
 
-/* Append new_node at the tail of the DLL */
+/* FUNCTION: dll_append - Append new_node at the tail of the DLL */
 void dll_append(CartNode** head, CartNode* new_node) {
     if (!*head) { *head = new_node; return; }
 
@@ -559,7 +517,7 @@ void dll_append(CartNode** head, CartNode* new_node) {
     new_node->prev = curr;
 }
 
-/* Set qty for an existing cart item, or append if not found */
+/* FUNCTION: dll_update_or_append - Set qty for an existing cart item, or append if not found */
 void dll_update_or_append(CartNode** head, const char* veg_id, const char* name,
                           int qty_g, float price_per_1000g, int is_free) {
     CartNode* curr = *head;
@@ -576,7 +534,7 @@ void dll_update_or_append(CartNode** head, const char* veg_id, const char* name,
     if (node) dll_append(head, node);
 }
 
-/* Unlink and free the CartNode matching veg_id */
+/* FUNCTION: dll_remove - Unlink and free the CartNode matching veg_id */
 void dll_remove(CartNode** head, const char* veg_id) {
     CartNode* curr = *head;
     while (curr) {
@@ -591,7 +549,7 @@ void dll_remove(CartNode** head, const char* veg_id) {
     }
 }
 
-/* Sum item_total across all CartNodes and return grand total */
+/* FUNCTION: dll_get_total - Sum item_total across all CartNodes and return grand total */
 float dll_get_total(CartNode* head) {
     float total = 0.0f;
     CartNode* curr = head;
@@ -599,7 +557,7 @@ float dll_get_total(CartNode* head) {
     return total;
 }
 
-/* Release memory for every node in the cart DLL */
+/* FUNCTION: dll_free_all - Release memory for every node in the cart DLL */
 void dll_free_all(CartNode* head) {
     CartNode* curr = head;
     while (curr) {
@@ -614,14 +572,14 @@ void dll_free_all(CartNode* head) {
    DATA STRUCTURE 2: STANDARD QUEUE (FIFO Order Processing)
    ══════════════════════════════════════════════════════════════ */
 
-/* Zero-initialise an OrderQueue before first use */
+/* FUNCTION: queue_init - Zero-initialise an OrderQueue before first use */
 void queue_init(OrderQueue* q) {
     q->front = NULL;
     q->rear  = NULL;
     q->size  = 0;
 }
 
-/* Append an Order at the rear of the queue */
+/* FUNCTION: queue_enqueue - Append an Order at the rear of the queue */
 void queue_enqueue(OrderQueue* q, Order o) {
     QueueNode* node = (QueueNode*)malloc(sizeof(QueueNode));
     if (!node) return;
@@ -635,7 +593,7 @@ void queue_enqueue(OrderQueue* q, Order o) {
     q->size++;
 }
 
-/* Remove and return the front Order; returns 1 on success, 0 if empty */
+/* FUNCTION: queue_dequeue - Remove and return the front Order; returns 1 on success, 0 if empty */
 int queue_dequeue(OrderQueue* q, Order* out) {
     if (!q->front) return 0;
 
@@ -649,7 +607,7 @@ int queue_dequeue(OrderQueue* q, Order* out) {
     return 1;
 }
 
-/* Drain and free all remaining nodes in the queue */
+/* FUNCTION: queue_free - Drain and free all remaining nodes in the queue */
 void queue_free(OrderQueue* q) {
     Order dummy;
     while (queue_dequeue(q, &dummy));
@@ -660,7 +618,7 @@ void queue_free(OrderQueue* q) {
    DATA STRUCTURE 3: CIRCULAR LINKED LIST (Delivery Allocation)
    ══════════════════════════════════════════════════════════════ */
 
-/* Build a CLL of active delivery boys from an in-memory SLL */
+/* FUNCTION: cll_build_from_sll - Build a CLL of active delivery boys from an in-memory SLL */
 DeliveryNode* cll_build_from_sll(DeliveryBoyNode* sll_head) {
     DeliveryNode* head = NULL;
     DeliveryNode* tail = NULL;
@@ -691,7 +649,7 @@ DeliveryNode* cll_build_from_sll(DeliveryBoyNode* sll_head) {
     return head;
 }
 
-/* Round-robin pick of next active boy; persists updated flags */
+/* FUNCTION: cll_assign_delivery - Round-robin pick of next active boy; persists updated flags */
 int cll_assign_delivery(DeliveryNode* head, DeliveryBoy* out_boy,
                         DeliveryBoyNode* sll_head) {
     if (!head) return 0;
@@ -736,7 +694,7 @@ int cll_assign_delivery(DeliveryNode* head, DeliveryBoy* out_boy,
     return 1;
 }
 
-/* Free all CLL nodes by counting first (no NULL terminator) */
+/* FUNCTION: cll_free - Free all CLL nodes by counting first (no NULL terminator) */
 void cll_free(DeliveryNode* head) {
     if (!head) return;
 
@@ -758,14 +716,14 @@ void cll_free(DeliveryNode* head) {
    Array-mapped binary heap; slot_priority 1=Morning (most urgent).
    ══════════════════════════════════════════════════════════════ */
 
-/* Swap two Order elements within the heap array */
+/* FUNCTION: heap_swap - Swap two Order elements within the heap array */
 void heap_swap(MinHeap* h, int i, int j) {
     Order temp  = h->data[i];
     h->data[i]  = h->data[j];
     h->data[j]  = temp;
 }
 
-/* Bubble a newly inserted element up to its correct position */
+/* FUNCTION: heap_heapify_up - Bubble a newly inserted element up to its correct position */
 void heap_heapify_up(MinHeap* h, int idx) {
     while (idx > 0) {
         int parent = (idx - 1) / 2;
@@ -778,7 +736,7 @@ void heap_heapify_up(MinHeap* h, int idx) {
     }
 }
 
-/* Sink the root element down after an extract-min */
+/* FUNCTION: heap_heapify_down - Sink the root element down after an extract-min */
 void heap_heapify_down(MinHeap* h, int idx) {
     while (1) {
         int left     = 2 * idx + 1;
@@ -795,7 +753,7 @@ void heap_heapify_down(MinHeap* h, int idx) {
     }
 }
 
-/* Add an Order to the heap in O(log n) */
+/* FUNCTION: heap_insert - Add an Order to the heap in O(log n) */
 void heap_insert(MinHeap* h, Order o) {
     if (h->size >= MAX_ORDERS) return;
     h->data[h->size] = o;
@@ -803,7 +761,7 @@ void heap_insert(MinHeap* h, Order o) {
     h->size++;
 }
 
-/* Remove and return the most-urgent Order; returns 1 on success, 0 if empty */
+/* FUNCTION: heap_extract_min - Remove and return the most-urgent Order; returns 1 on success, 0 if empty */
 int heap_extract_min(MinHeap* h, Order* out) {
     if (h->size == 0) return 0;
 
