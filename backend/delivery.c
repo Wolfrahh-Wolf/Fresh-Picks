@@ -32,18 +32,13 @@
  *     → Dump ALL orders sorted by slot priority (Morning first),
  *       then timestamp ASC as tiebreaker.
  *
- * ─────────────────────────────────────────────────────────────────
- * OUTPUT FORMAT:
- *   Always "SUCCESS|message/count" or "ERROR|reason"
- *   Flask reads stdout and passes it back to the frontend as JSON.
- *
  * Team: CodeCrafters | Project: Fresh Picks | SDP-1
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "models.h"   /* Struct definitions, SLL node types, utils.c prototypes */
+#include "models.h"
 
 
 /* ═════════════════════════════════════════════════════════════

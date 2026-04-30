@@ -20,7 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "models.h"   /* Struct definitions, SLL node types, macros, utils.c API */
+#include "models.h"
 
 
 /* cmd_login_user — linear scan over user table: match by username+password, O(N) on table slots */
