@@ -86,7 +86,9 @@ import ssl
 import os
 import tempfile
 import sys
+import smtplib
 from datetime import datetime
+from email.message import EmailMessage
 
 from flask import (
     Flask,
@@ -204,6 +206,111 @@ def _parse_multiline_orders(raw_output):
             orders.append(order)
 
     return orders
+
+
+def _get_receipt_data(order_id):
+    """
+    Fetch and parse receipt data from the C receipt binary.
+    Used by both download and email receipt endpoints.
+    """
+    result = run_c_binary("receipt", [order_id])
+
+    if result["status"] != "SUCCESS":
+        return None, result.get("data", "Could not fetch order data")
+
+    raw = result["raw_output"].strip().split("\n")[0]
+    parts = raw.split("|")
+
+    if len(parts) < 14:
+        return None, f"Malformed receipt data ({len(parts)} fields)"
+
+    return {
+        "order_id":    parts[1],
+        "user_id":     parts[2],
+        "full_name":   parts[3],
+        "user_phone":  parts[4],
+        "user_email":  parts[5],
+        "address":     parts[6],
+        "slot":        parts[7],
+        "status":      parts[8],
+        "timestamp":   parts[9],
+        "boy_name":    parts[10],
+        "boy_phone":   parts[11],
+        "total":       _safe_float(parts[12]),
+        "items_string": "|".join(parts[13:]),
+    }, None
+
+
+def _generate_receipt_pdf(receipt_data):
+    """
+    Generate receipt PDF and return (path, error).
+    Caller is responsible for deleting the temp file when appropriate.
+    """
+    try:
+        with tempfile.NamedTemporaryFile(
+            suffix=".pdf",
+            delete=False,
+            prefix=f"{receipt_data['order_id']}_{receipt_data['user_id']}_"
+        ) as tmp:
+            tmp_path = tmp.name
+
+        generate_receipt(receipt_data, tmp_path)
+        return tmp_path, None
+    except Exception as e:
+        return None, f"PDF generation failed: {str(e)}"
+
+
+def _send_receipt_email(receipt_data, pdf_path):
+    """
+    Send receipt PDF using SMTP credentials from environment variables.
+
+    Required:
+      FP_EMAIL_USER
+      FP_EMAIL_APP_PASSWORD
+
+    Optional:
+      FP_SMTP_HOST defaults to smtp.gmail.com
+      FP_SMTP_PORT defaults to 587
+    """
+    sender = os.environ.get("FP_EMAIL_USER", "").strip()
+    password = os.environ.get("FP_EMAIL_APP_PASSWORD", "").strip()
+    smtp_host = os.environ.get("FP_SMTP_HOST", "smtp.gmail.com").strip()
+    smtp_port = int(os.environ.get("FP_SMTP_PORT", "587"))
+
+    if not sender or not password:
+        return "Email sender is not configured. Set FP_EMAIL_USER and FP_EMAIL_APP_PASSWORD."
+
+    recipient = receipt_data.get("user_email", "").strip()
+    if not recipient:
+        return "Customer email address is missing for this order."
+
+    order_id = receipt_data.get("order_id", "order")
+    msg = EmailMessage()
+    msg["Subject"] = f"Fresh Picks Receipt - {order_id}"
+    msg["From"] = sender
+    msg["To"] = recipient
+    msg.set_content(
+        f"Hi {receipt_data.get('full_name', 'Customer')},\n\n"
+        f"Your Fresh Picks receipt for order {order_id} is attached.\n\n"
+        "Thank you for shopping with Fresh Picks.\n"
+    )
+
+    with open(pdf_path, "rb") as f:
+        msg.add_attachment(
+            f.read(),
+            maintype="application",
+            subtype="pdf",
+            filename=f"{order_id}_{receipt_data.get('user_id', 'customer')}.pdf"
+        )
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+            server.starttls()
+            server.login(sender, password)
+            server.send_message(msg)
+        return None
+    except Exception as e:
+        return f"Email send failed: {str(e)}"
 
 
 # =============================================================
@@ -1146,6 +1253,43 @@ def api_download_receipt(order_id):
 # BLOCK 2 — API ROUTES
 # Add these before the "START THE SERVER" section.
 # =============================================================
+
+@app.route("/api/email_receipt/<order_id>", methods=["POST"])
+def api_email_receipt(order_id):
+    """
+    POST /api/email_receipt/<order_id>
+    Generate the same PDF receipt and email it to the customer.
+    """
+    if "user_id" not in session and session.get("role") != "admin":
+        return jsonify({"status": "ERROR", "message": "Not logged in"}), 401
+
+    receipt_data, error = _get_receipt_data(order_id)
+    if error:
+        return jsonify({"status": "ERROR", "message": error}), 404
+
+    if session.get("role") == "user" and receipt_data.get("user_id") != session.get("user_id"):
+        return jsonify({"status": "ERROR", "message": "This receipt belongs to another user"}), 403
+
+    tmp_path, error = _generate_receipt_pdf(receipt_data)
+    if error:
+        return jsonify({"status": "ERROR", "message": error}), 500
+
+    try:
+        error = _send_receipt_email(receipt_data, tmp_path)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+    if error:
+        return jsonify({"status": "ERROR", "message": error}), 500
+
+    return jsonify({
+        "status": "SUCCESS",
+        "message": f"Receipt emailed to {receipt_data.get('user_email', '')}"
+    })
+
 
 @app.route("/api/admin/list_users", methods=["GET"])
 def api_admin_list_users():

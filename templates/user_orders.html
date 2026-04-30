@@ -610,6 +610,13 @@ function buildOrderCard(order) {
                         <i class="bi bi-download me-1"></i>Receipt
                     </button>
 
+                    <!-- Email Receipt -->
+                    <button class="btn btn-sm btn-action"
+                            style="background:#28a745; color:#fff; border:none;"
+                            onclick="emailOrderReceipt('${order.order_id}', this)">
+                        <i class="bi bi-envelope me-1"></i>Email
+                    </button>
+
                     <!-- Cancel — ONLY for "Order Placed" -->
                     ${canCancel ? `
                     <button class="btn btn-sm btn-user-cancel"
@@ -742,6 +749,42 @@ function downloadOrderReceipt(orderId) {
         return;
     }
     window.location.href = `/api/download_receipt/${orderId}`;
+}
+
+async function emailOrderReceipt(orderId, buttonEl) {
+    if (!orderId) {
+        alert("No order ID provided.");
+        return;
+    }
+
+    const originalHtml = buttonEl ? buttonEl.innerHTML : "";
+    if (buttonEl) {
+        buttonEl.disabled = true;
+        buttonEl.innerHTML = `<span class="spinner-sm me-1"></span>Sending`;
+    }
+
+    try {
+        const response = await fetch(`/api/email_receipt/${orderId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}"
+        });
+        const data = await response.json();
+
+        if (data.status === "SUCCESS") {
+            alert(data.message || "Receipt emailed successfully.");
+        } else {
+            alert(data.message || "Could not email receipt.");
+        }
+    } catch (err) {
+        console.error(err);
+        alert("Network error while sending receipt email.");
+    } finally {
+        if (buttonEl) {
+            buttonEl.disabled = false;
+            buttonEl.innerHTML = originalHtml;
+        }
+    }
 }
 {% endraw %}
 

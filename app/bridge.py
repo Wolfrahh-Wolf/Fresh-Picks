@@ -68,14 +68,23 @@ def run_c_binary(executable_name, args_list):
         {"status": "ERROR",   "data": "Wrong password", "raw": "ERROR|Wrong password"}
     """
 
-    # Step 1: Build the full path to the binary
-    # On Linux/Mac: ../backend/auth
-    # On Windows:   ../backend/auth.exe (if you add .exe)
+    # Step 1: Build the full path to the binary.
+    # GCC on Windows may produce auth.exe even when the build script says
+    # "-o auth", so try the Unix-style name first and then the .exe fallback.
     binary_path = os.path.join(BACKEND_DIR, executable_name)
+    if not os.path.exists(binary_path) and os.name == "nt":
+        exe_path = binary_path + ".exe"
+        if os.path.exists(exe_path):
+            binary_path = exe_path
 
     # Step 2: Build the full command list
     # Example: ["../backend/auth", "login_user", "Yashwanth", "Yash@123"]
     command = [binary_path] + args_list
+    env = os.environ.copy()
+    if os.name == "nt":
+        msys_paths = [r"C:\msys64\ucrt64\bin", r"C:\msys64\usr\bin"]
+        existing_path = env.get("PATH", "")
+        env["PATH"] = os.pathsep.join(msys_paths + [existing_path])
 
     try:
         # Step 3: Run the command
@@ -88,7 +97,8 @@ def run_c_binary(executable_name, args_list):
             capture_output=True,
             text=True,
             timeout=10,
-            cwd=BACKEND_DIR  # <--- ADD THIS LINE
+            cwd=BACKEND_DIR,
+            env=env
         )
 
         # Step 4: Get the output from stdout and clean whitespace
