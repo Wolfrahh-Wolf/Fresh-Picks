@@ -70,6 +70,8 @@ Team: CodeCrafters | Project: Fresh Picks | SDP-1
 
 import os
 import datetime
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
 
 try:
     from cryptography import x509
