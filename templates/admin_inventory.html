@@ -173,303 +173,38 @@
     </div>
 
 
-    {# ════════════════════════════════════════════════════════
-       SECTION A: PAID VEGETABLES — grouped by category
-       ════════════════════════════════════════════════════════ #}
+{# ════════════════════════════════════════════════════════
+   SECTION A: PAID VEGETABLES — rendered by JS
+   ════════════════════════════════════════════════════════ #}
     <div class="section-header">
         <i class="bi bi-basket2 text-accent"></i>
         <h5>Vegetables</h5>
-        <span class="count-pill">{{ vegetables | length }}</span>
+        <span class="count-pill" id="veg-count">…</span>
     </div>
 
-    {% if vegetables %}
-
-    {# Group vegetables by category using Jinja2 groupby #}
-    {% set grouped = vegetables | groupby('category') %}
-
-    {% for group in grouped %}
-    {% set cat_id = group.grouper | lower | replace(' ', '-') %}
-
-    {# ── Collapsible category header ── #}
-    <button class="inv-cat-header"
-            id="inv-hdr-{{ cat_id }}"
-            type="button"
-            aria-expanded="true"
-            aria-controls="inv-wrap-{{ cat_id }}"
-            onclick="toggleInvCat('inv-hdr-{{ cat_id }}', 'inv-wrap-{{ cat_id }}')">
-
-        {# Price-tag SVG icon #}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             style="width:15px;height:15px;color:var(--accent);flex-shrink:0;">
-            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
-            <line x1="7" y1="7" x2="7.01" y2="7"/>
-        </svg>
-
-        <span class="inv-cat-title">{{ group.grouper }}</span>
-        <span class="inv-cat-count">{{ group.list | length }}</span>
-        <i class="bi bi-chevron-down inv-cat-chevron open"></i>
-    </button>
-
-    {# ── Collapsible card grid ── #}
-    <div class="inv-cat-wrap expanded"
-         id="inv-wrap-{{ cat_id }}">
-
-        <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-3">
-
-            {% for v in group.list %}
-            <div class="col">
-                <div class="inv-card-wrap">
-                    <div class="inv-card"
-                         id="veg-card-{{ v.veg_id }}"
-                         data-id="{{ v.veg_id }}"
-                         data-type="vegetable">
-
-                        {# ── 1:1 image container ── #}
-                        <div class="inv-card-img-wrap">
-                            <img src="/product_images/{{ v.veg_id }}.jpeg"
-                                 alt="{{ v.name }}"
-                                 class="inv-card-img"
-                                 onerror="this.onerror=null; this.parentNode.innerHTML='<div class=\'inv-img-placeholder\'>🥬</div>';">
-                        </div>
-
-                        {# ── Stock Progress Bar ──
-                           Reference max = 100,000g (100 kg).
-                           Turns red (var(--danger)) when stock_g < 5000.
-                        ── #}
-                        <div class="stock-bar-wrap">
-                            {% set pct = [(v.stock_g / 100000 * 100), 100] | min %}
-                            <div class="stock-bar-label">
-                                <span>Stock</span>
-                                <span id="bar-label-{{ v.veg_id }}">
-                                    {% if v.stock_g >= 1000 %}
-                                        {{ "%.1f" | format(v.stock_g / 1000) }} kg
-                                    {% else %}
-                                        {{ v.stock_g }} g
-                                    {% endif %}
-                                </span>
-                            </div>
-                            <div class="stock-bar-track">
-                                <div class="stock-bar-fill {% if v.stock_g < 5000 %}low-stock{% endif %}"
-                                     id="bar-fill-{{ v.veg_id }}"
-                                     style="width: {{ pct | round(1) }}%">
-                                </div>
-                            </div>
-                        </div>
-
-                        {# ── Card body: name, id, editable fields ── #}
-                        <div class="inv-card-body">
-
-                            <div class="inv-item-name">{{ v.name }}</div>
-                            <div class="inv-item-category">{{ v.category }}</div>
-                            <div class="inv-id-badge">
-                                {{ v.veg_id }}
-                                <span class="saving-dot d-none" id="dot-{{ v.veg_id }}"></span>
-                            </div>
-
-                            {# PRICE field #}
-                            <div class="field-row">
-                                <label for="price-{{ v.veg_id }}">Price</label>
-                                <input type="number"
-                                       class="field-input"
-                                       id="price-{{ v.veg_id }}"
-                                       value="{{ v.price_per_1000g }}"
-                                       step="0.5"
-                                       min="0.5"
-                                       title="Price per 1 kg (₹)"
-                                       onchange="scheduleUpdate('{{ v.veg_id }}', 'vegetable')">
-                                <span class="field-unit">₹/kg</span>
-                            </div>
-
-                            {# STOCK field #}
-                            <div class="field-row">
-                                <label for="stock-{{ v.veg_id }}">Stock</label>
-                                <input type="number"
-                                       class="field-input"
-                                       id="stock-{{ v.veg_id }}"
-                                       value="{{ v.stock_g }}"
-                                       step="100"
-                                       min="0"
-                                       title="Stock in grams"
-                                       onchange="scheduleUpdate('{{ v.veg_id }}', 'vegetable')">
-                                <span class="field-unit">g</span>
-                            </div>
-
-                            {# VALIDITY field #}
-                            <div class="field-row">
-                                <label for="validity-{{ v.veg_id }}">Valid.</label>
-                                <input type="number"
-                                       class="field-input"
-                                       id="validity-{{ v.veg_id }}"
-                                       value="{{ v.validity_days }}"
-                                       step="1"
-                                       min="1"
-                                       title="Validity in days"
-                                       onchange="scheduleUpdate('{{ v.veg_id }}', 'vegetable')">
-                                <span class="field-unit">d</span>
-                            </div>
-
-                            {# 3 / 5 / 7 day quick-select buttons #}
-                            <div class="validity-btns" id="vbtn-group-{{ v.veg_id }}">
-                                {% for days in [3, 5, 7] %}
-                                <button class="validity-btn {% if v.validity_days == days %}active{% endif %}"
-                                        onclick="setValidity('{{ v.veg_id }}', {{ days }}, 'vegetable', this)">
-                                    {{ days }}d
-                                </button>
-                                {% endfor %}
-                            </div>
-
-                            {# +5 Kg REFILL button #}
-                            <button class="btn-refill"
-                                    id="refill-{{ v.veg_id }}"
-                                    onclick="doRefill('{{ v.veg_id }}', 'vegetable')">
-                                <i class="bi bi-plus-circle me-1"></i>+5 Kg
-                            </button>
-
-                        </div><!-- END inv-card-body -->
-                    </div><!-- END inv-card -->
-                </div><!-- END inv-card-wrap -->
-            </div><!-- END col -->
-            {% endfor %}
-
-        </div><!-- END row -->
-    </div><!-- END inv-cat-wrap -->
-
-    {% endfor %}{# end grouped #}
-
-    {% else %}
-    {# Empty state #}
-    <div class="empty-state mb-5">
-        <i class="bi bi-inbox"></i>
-        No vegetables found in inventory.
-    </div>
-    {% endif %}
-
-
-    {# ════════════════════════════════════════════════════════
-       SECTION B: PROMOTIONAL FREEBIES
-       Same #007ACC blue border as paid vegetables.
-       Only stock_g is editable; trigger & free_qty are read-only.
-       ════════════════════════════════════════════════════════ #}
-    <div class="section-header" style="margin-top: 2rem;">
-        <i class="bi bi-gift text-accent"></i>
-        <h5>Promotional Freebies</h5>
-        <span class="count-pill">{{ free_items | length }}</span>
-        <span class="section-note">Stock updates only — trigger &amp; qty set by business team</span>
+    <div id="vegContainer">
+        <div class="empty-state mb-5" id="veg-loading">
+            <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+            Loading inventory…
+        </div>
     </div>
 
-    {% if free_items %}
-    <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-3 mb-5">
+{# ════════════════════════════════════════════════════════
+   SECTION B: PROMOTIONAL FREEBIES — rendered by JS
+   ════════════════════════════════════════════════════════ #}
+<div class="section-header" style="margin-top: 2rem;">
+    <i class="bi bi-gift text-accent"></i>
+    <h5>Promotional Freebies</h5>
+    <span class="count-pill" id="promo-count">…</span>
+    <span class="section-note">Stock updates only — trigger &amp; qty set by business team</span>
+</div>
 
-        {% for fi in free_items %}
-        <div class="col">
-            <div class="inv-card-wrap">
-
-                {# "FREE" badge overlaid on card #}
-                <span class="promo-badge">FREE</span>
-
-                <div class="inv-card"
-                     id="veg-card-{{ fi.vf_id }}"
-                     data-id="{{ fi.vf_id }}"
-                     data-type="promo">
-
-                    {# ── 1:1 image container ── #}
-                    <div class="inv-card-img-wrap">
-                        <img src="/product_images/{{ fi.vf_id }}.jpeg"
-                             alt="{{ fi.name }}"
-                             class="inv-card-img"
-                             onerror="this.onerror=null; this.parentNode.innerHTML='<div class=\'inv-img-placeholder\'>🥬</div>';">
-                    </div>
-
-                    {# ── Stock Progress Bar ──
-                       Reference max for promo = 20,000g (20 kg).
-                       Also turns red when stock_g < 5000.
-                    ── #}
-                    <div class="stock-bar-wrap">
-                        {% set pct = [(fi.stock_g / 20000 * 100), 100] | min %}
-                        <div class="stock-bar-label">
-                            <span>Stock</span>
-                            <span id="bar-label-{{ fi.vf_id }}">
-                                {% if fi.stock_g >= 1000 %}
-                                    {{ "%.1f" | format(fi.stock_g / 1000) }} kg
-                                {% else %}
-                                    {{ fi.stock_g }} g
-                                {% endif %}
-                            </span>
-                        </div>
-                        <div class="stock-bar-track">
-                            <div class="stock-bar-fill {% if fi.stock_g < 5000 %}low-stock{% endif %}"
-                                 id="bar-fill-{{ fi.vf_id }}"
-                                 style="width: {{ pct | round(1) }}%">
-                            </div>
-                        </div>
-                    </div>
-
-                    {# ── Card body ── #}
-                    <div class="inv-card-body">
-
-                        <div class="inv-item-name">{{ fi.name }}</div>
-                        <div class="inv-id-badge">
-                            {{ fi.vf_id }}
-                            <span class="saving-dot d-none" id="dot-{{ fi.vf_id }}"></span>
-                        </div>
-
-                        {# STOCK field (editable) #}
-                        <div class="field-row">
-                            <label for="stock-{{ fi.vf_id }}">Stock</label>
-                            <input type="number"
-                                   class="field-input"
-                                   id="stock-{{ fi.vf_id }}"
-                                   value="{{ fi.stock_g }}"
-                                   step="100"
-                                   min="0"
-                                   title="Promo stock in grams"
-                                   onchange="scheduleUpdate('{{ fi.vf_id }}', 'promo')">
-                            <span class="field-unit">g</span>
-                        </div>
-
-                        {# TRIGGER field (read-only) #}
-                        <div class="field-row">
-                            <label>Trigger</label>
-                            <input type="text"
-                                   class="field-input"
-                                   value="₹{{ fi.min_trigger_amt }}"
-                                   readonly
-                                   title="Minimum order amount to trigger freebie">
-                        </div>
-
-                        {# FREE QTY field (read-only) #}
-                        <div class="field-row">
-                            <label>Free Qty</label>
-                            <input type="text"
-                                   class="field-input"
-                                   value="{{ fi.free_qty_g }}g"
-                                   readonly
-                                   title="Quantity given free per qualifying order">
-                        </div>
-
-                        {# +5 Kg REFILL button #}
-                        <button class="btn-refill"
-                                id="refill-{{ fi.vf_id }}"
-                                onclick="doRefill('{{ fi.vf_id }}', 'promo')">
-                            <i class="bi bi-plus-circle me-1"></i>+5 Kg
-                        </button>
-
-                    </div><!-- END inv-card-body -->
-                </div><!-- END inv-card -->
-            </div><!-- END inv-card-wrap -->
-        </div><!-- END col -->
-        {% endfor %}
-
-    </div><!-- END row promo -->
-
-    {% else %}
-    {# Empty state #}
-    <div class="empty-state mb-5">
-        <i class="bi bi-inbox"></i>
-        No promotional freebie items found.
+<div id="promoContainer" class="row row-cols-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-3 mb-5">
+    <div class="col" id="promo-loading">
+        <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+        Loading…
     </div>
-    {% endif %}
+</div>
 
 </div><!-- END container-fluid -->
 
@@ -511,6 +246,261 @@ document.getElementById('pageTimestamp').textContent =
    Each item id gets its own 800ms timer.
    ════════════════════════════════════════════════════════════════ */
 const debounceTimers = {};
+
+/* ════════════════════════════════════════════════════════════════
+   loadInventoryData()
+   Fetches /api/admin/inventory_data on page load and builds both
+   the grouped vegetable grid and the promo freebies grid via
+   template literals.  All button IDs are attached to dynamic HTML
+   so doRefill(), scheduleUpdate(), setValidity() still work.
+   ════════════════════════════════════════════════════════════════ */
+window.onload = async function loadInventoryData() {
+    try {
+        const res  = await fetch('/api/admin/inventory_data');
+        const data = await res.json();
+
+        if (data.status !== 'SUCCESS') throw new Error(data.message || 'API error');
+
+        // ── Vegetables: group by category ────────────────────────
+        const vegContainer = document.getElementById('vegContainer');
+        const vegs         = data.vegetables || [];
+        document.getElementById('veg-count').textContent = vegs.length;
+
+        if (vegs.length === 0) {
+            vegContainer.innerHTML = `
+                <div class="empty-state mb-5">
+                    <i class="bi bi-inbox"></i> No vegetables found in inventory.
+                </div>`;
+        } else {
+            // Build category → items map
+            const groups = {};
+            vegs.forEach(v => {
+                if (!groups[v.category]) groups[v.category] = [];
+                groups[v.category].push(v);
+            });
+
+            let html = '';
+            Object.entries(groups).forEach(([cat, items]) => {
+                const catId = cat.toLowerCase().replace(/\s+/g, '-');
+                html += `
+                <button class="inv-cat-header"
+                        id="inv-hdr-${catId}" type="button"
+                        aria-expanded="true" aria-controls="inv-wrap-${catId}"
+                        onclick="toggleInvCat('inv-hdr-${catId}','inv-wrap-${catId}')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                         style="width:15px;height:15px;color:var(--accent);flex-shrink:0;">
+                        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+                        <line x1="7" y1="7" x2="7.01" y2="7"/>
+                    </svg>
+                    <span class="inv-cat-title">${escapeHtml(cat)}</span>
+                    <span class="inv-cat-count">${items.length}</span>
+                    <i class="bi bi-chevron-down inv-cat-chevron open"></i>
+                </button>
+                <div class="inv-cat-wrap expanded" id="inv-wrap-${catId}">
+                    <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-3">
+                        ${items.map(v => buildVegCard(v)).join('')}
+                    </div>
+                </div>`;
+            });
+            vegContainer.innerHTML = html;
+        }
+
+        // ── Promo Freebies ────────────────────────────────────────
+        const promoContainer = document.getElementById('promoContainer');
+        const promos         = data.free_items || [];
+        document.getElementById('promo-count').textContent = promos.length;
+
+        if (promos.length === 0) {
+            promoContainer.innerHTML = `
+                <div class="col">
+                    <div class="empty-state mb-5">
+                        <i class="bi bi-inbox"></i> No promotional freebie items found.
+                    </div>
+                </div>`;
+        } else {
+            promoContainer.innerHTML = promos.map(fi => buildPromoCard(fi)).join('');
+        }
+
+    } catch (err) {
+        console.error('loadInventoryData error:', err);
+        const msg = `
+            <div class="empty-state mb-5" style="color:var(--danger);">
+                <i class="bi bi-exclamation-triangle"></i>
+                Data Load Failed — could not reach inventory API.
+            </div>`;
+        document.getElementById('vegContainer').innerHTML   = msg;
+        document.getElementById('promoContainer').innerHTML = `<div class="col">${msg}</div>`;
+        document.getElementById('veg-count').textContent    = '!';
+        document.getElementById('promo-count').textContent  = '!';
+    }
+};
+
+/* ── HTML escape helper ─────────────────────────────────────── */
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── buildVegCard(v) ────────────────────────────────────────── */
+function buildVegCard(v) {
+    const pct      = Math.min((v.stock_g / 100000) * 100, 100).toFixed(1);
+    const lowClass = v.stock_g < 5000 ? 'low-stock' : '';
+    const stockLbl = v.stock_g >= 1000
+        ? `${(v.stock_g / 1000).toFixed(1)} kg`
+        : `${v.stock_g} g`;
+    const days = [3, 5, 7];
+
+    return `
+    <div class="col">
+        <div class="inv-card-wrap">
+            <div class="inv-card" id="veg-card-${v.veg_id}"
+                 data-id="${v.veg_id}" data-type="vegetable">
+
+                <div class="inv-card-img-wrap">
+                    <img src="/product_images/${escapeHtml(v.veg_id)}.jpeg"
+                         alt="${escapeHtml(v.name)}" class="inv-card-img"
+                         onerror="this.onerror=null;this.parentNode.innerHTML='<div class=\\'inv-img-placeholder\\'>🥬</div>';">
+                </div>
+
+                <div class="stock-bar-wrap">
+                    <div class="stock-bar-label">
+                        <span>Stock</span>
+                        <span id="bar-label-${v.veg_id}">${stockLbl}</span>
+                    </div>
+                    <div class="stock-bar-track">
+                        <div class="stock-bar-fill ${lowClass}"
+                             id="bar-fill-${v.veg_id}"
+                             style="width:${pct}%"></div>
+                    </div>
+                </div>
+
+                <div class="inv-card-body">
+                    <div class="inv-item-name">${escapeHtml(v.name)}</div>
+                    <div class="inv-item-category">${escapeHtml(v.category)}</div>
+                    <div class="inv-id-badge">
+                        ${escapeHtml(v.veg_id)}
+                        <span class="saving-dot d-none" id="dot-${v.veg_id}"></span>
+                    </div>
+
+                    <div class="field-row">
+                        <label for="price-${v.veg_id}">Price</label>
+                        <input type="number" class="field-input" id="price-${v.veg_id}"
+                               value="${v.price_per_1000g}" step="0.5" min="0.5"
+                               title="Price per 1 kg (₹)"
+                               onchange="scheduleUpdate('${v.veg_id}','vegetable')">
+                        <span class="field-unit">₹/kg</span>
+                    </div>
+
+                    <div class="field-row">
+                        <label for="stock-${v.veg_id}">Stock</label>
+                        <input type="number" class="field-input" id="stock-${v.veg_id}"
+                               value="${v.stock_g}" step="100" min="0"
+                               title="Stock in grams"
+                               onchange="scheduleUpdate('${v.veg_id}','vegetable')">
+                        <span class="field-unit">g</span>
+                    </div>
+
+                    <div class="field-row">
+                        <label for="validity-${v.veg_id}">Valid.</label>
+                        <input type="number" class="field-input" id="validity-${v.veg_id}"
+                               value="${v.validity_days}" step="1" min="1"
+                               title="Validity in days"
+                               onchange="scheduleUpdate('${v.veg_id}','vegetable')">
+                        <span class="field-unit">d</span>
+                    </div>
+
+                    <div class="validity-btns" id="vbtn-group-${v.veg_id}">
+                        ${days.map(d => `
+                        <button class="validity-btn ${v.validity_days === d ? 'active' : ''}"
+                                onclick="setValidity('${v.veg_id}',${d},'vegetable',this)">
+                            ${d}d
+                        </button>`).join('')}
+                    </div>
+
+                    <button class="btn-refill" id="refill-${v.veg_id}"
+                            onclick="doRefill('${v.veg_id}','vegetable')">
+                        <i class="bi bi-plus-circle me-1"></i>+5 Kg
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>`;
+}
+
+/* ── buildPromoCard(fi) ─────────────────────────────────────── */
+function buildPromoCard(fi) {
+    const pct      = Math.min((fi.stock_g / 20000) * 100, 100).toFixed(1);
+    const lowClass = fi.stock_g < 5000 ? 'low-stock' : '';
+    const stockLbl = fi.stock_g >= 1000
+        ? `${(fi.stock_g / 1000).toFixed(1)} kg`
+        : `${fi.stock_g} g`;
+
+    return `
+    <div class="col">
+        <div class="inv-card-wrap">
+            <span class="promo-badge">FREE</span>
+            <div class="inv-card" id="veg-card-${fi.vf_id}"
+                 data-id="${fi.vf_id}" data-type="promo">
+
+                <div class="inv-card-img-wrap">
+                    <img src="/product_images/${escapeHtml(fi.vf_id)}.jpeg"
+                         alt="${escapeHtml(fi.name)}" class="inv-card-img"
+                         onerror="this.onerror=null;this.parentNode.innerHTML='<div class=\\'inv-img-placeholder\\'>🥬</div>';">
+                </div>
+
+                <div class="stock-bar-wrap">
+                    <div class="stock-bar-label">
+                        <span>Stock</span>
+                        <span id="bar-label-${fi.vf_id}">${stockLbl}</span>
+                    </div>
+                    <div class="stock-bar-track">
+                        <div class="stock-bar-fill ${lowClass}"
+                             id="bar-fill-${fi.vf_id}"
+                             style="width:${pct}%"></div>
+                    </div>
+                </div>
+
+                <div class="inv-card-body">
+                    <div class="inv-item-name">${escapeHtml(fi.name)}</div>
+                    <div class="inv-id-badge">
+                        ${escapeHtml(fi.vf_id)}
+                        <span class="saving-dot d-none" id="dot-${fi.vf_id}"></span>
+                    </div>
+
+                    <div class="field-row">
+                        <label for="stock-${fi.vf_id}">Stock</label>
+                        <input type="number" class="field-input" id="stock-${fi.vf_id}"
+                               value="${fi.stock_g}" step="100" min="0"
+                               title="Promo stock in grams"
+                               onchange="scheduleUpdate('${fi.vf_id}','promo')">
+                        <span class="field-unit">g</span>
+                    </div>
+
+                    <div class="field-row">
+                        <label>Trigger</label>
+                        <input type="text" class="field-input"
+                               value="₹${fi.min_trigger_amt}" readonly
+                               title="Minimum order amount to trigger freebie">
+                    </div>
+
+                    <div class="field-row">
+                        <label>Free Qty</label>
+                        <input type="text" class="field-input"
+                               value="${fi.free_qty_g}g" readonly
+                               title="Quantity given free per qualifying order">
+                    </div>
+
+                    <button class="btn-refill" id="refill-${fi.vf_id}"
+                            onclick="doRefill('${fi.vf_id}','promo')">
+                        <i class="bi bi-plus-circle me-1"></i>+5 Kg
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>`;
+}
 
 /**
  * scheduleUpdate(itemId, type)

@@ -317,7 +317,7 @@
             <p class="mb-0 text-muted" style="font-size:0.85rem;">
                 Browse and inspect all registered customer accounts.
                 Total:
-                <strong style="color:var(--accent);">{{ total_count }}</strong> users.
+                <strong style="color:var(--accent);" id="ud-total-count">…</strong> users.
             </p>
         </div>
         <a href="/admin_dash" class="btn btn-sm btn-secondary">
@@ -348,8 +348,8 @@
         </div>
 
         <span id="ud-result-count">
-            Showing <strong id="ud-shown">{{ users | length }}</strong>
-            of <strong>{{ total_count }}</strong>
+            Showing <strong id="ud-shown">0</strong>
+            of <strong id="ud-total-inline">…</strong>
         </span>
     </div>
 
@@ -357,62 +357,20 @@
     <div class="d-flex flex-column gap-2" id="ud-grid">
 
         {% if users %}
-            {% for u in users %}
-            <div class="ud-item"
-                 data-name="{{ u.full_name | lower }}"
-                 data-uid="{{ u.user_id | lower }}"
-                 data-status="{{ u.status | lower }}">
-
-                <div class="ud-card">
-
-                    {# LEFT — avatar + UID #}
-                    <div class="ud-uid-block">
-                        <div class="ud-avatar">
-                            {{ u.full_name.split()[0][0] if u.full_name else '?' }}
-                        </div>
-                        <div class="ud-uid-text">{{ u.user_id }}</div>
-                    </div>
-
-                    {# CENTRE — 4 key details in 2×2 grid #}
-                    <div class="ud-info">
-                        <div class="ud-info-item">
-                            <span class="ud-info-label">Full Name</span>
-                            <span class="ud-info-value">{{ u.full_name }}</span>
-                        </div>
-                        <div class="ud-info-item">
-                            <span class="ud-info-label">Username</span>
-                            <span class="ud-info-value">@{{ u.username }}</span>
-                        </div>
-                        <div class="ud-info-item">
-                            <span class="ud-info-label">Email</span>
-                            <span class="ud-info-value">{{ u.email }}</span>
-                        </div>
-                        <div class="ud-info-item">
-                            <span class="ud-info-label">Status</span>
-                            <span class="ud-info-value">
-                                {% if u.status == "Active" %}
-                                    <span class="ud-status-badge ud-status-active">
-                                        <i class="bi bi-circle-fill me-1" style="font-size:0.45rem;"></i>Active
-                                    </span>
-                                {% else %}
-                                    <span class="ud-status-badge ud-status-inactive">
-                                        <i class="bi bi-circle me-1" style="font-size:0.45rem;"></i>Inactive
-                                    </span>
-                                {% endif %}
-                            </span>
-                        </div>
-                    </div>
-
-                    {# RIGHT — View Details button #}
-                    <button class="ud-details-btn"
-                            data-uid="{{ u.user_id }}"
-                            data-name="{{ u.full_name }}">
-                        <i class="bi bi-person-lines-fill me-1"></i>View Details
-                    </button>
-
+            {# ── User Card List — populated by JS fetch() ── #}
+            <div class="d-flex flex-column gap-2" id="ud-grid">
+                <div id="ud-loading" style="text-align:center; padding:3rem; color:var(--text-muted);">
+                    <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                    Loading users…
                 </div>
             </div>
-            {% endfor %}
+
+            {# ── Empty State (shown via JS when no cards match) ── #}
+            <div id="ud-empty">
+                <div class="ud-empty-icon">👤</div>
+                <p class="fw-bold text-bright mb-1">No users found</p>
+                <p>Try adjusting your search or filter.</p>
+            </div>
         {% endif %}
 
     </div>
@@ -492,6 +450,7 @@
 
 (function () {
 
+    let allUsers      = [];      // master copy from API
     let currentFilter = "all";
     let currentSearch = "";
 
@@ -500,7 +459,74 @@
     const shownBadge  = document.getElementById("ud-shown");
     const searchInput = document.getElementById("ud-search");
 
-    /* ── applyFilters ─────────────────────────────────────────── */
+    /* ── escHtml (unchanged from original) ───────────────────── */
+    function escHtml(str) {
+        if (!str) return "";
+        return str.replace(/&/g,"&amp;").replace(/</g,"&lt;")
+                  .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    function getInitials(name) {
+        if (!name) return "?";
+        const words = name.trim().split(/\s+/);
+        return words.length >= 2
+            ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
+            : words[0][0].toUpperCase();
+    }
+
+    function formatAddress(raw) {
+        if (!raw) return "—";
+        return raw.split(/[\n\r|;,]+/).map(s => s.trim()).filter(Boolean).join("<br>");
+    }
+
+    /* ── Build one card's HTML ────────────────────────────────── */
+    function buildUserCard(u) {
+        const statusBadge = u.status.toLowerCase() === "active"
+            ? `<span class="ud-status-badge ud-status-active">
+                   <i class="bi bi-circle-fill me-1" style="font-size:0.45rem;"></i>Active
+               </span>`
+            : `<span class="ud-status-badge ud-status-inactive">
+                   <i class="bi bi-circle me-1" style="font-size:0.45rem;"></i>Inactive
+               </span>`;
+
+        return `
+        <div class="ud-item"
+             data-name="${escHtml(u.full_name.toLowerCase())}"
+             data-uid="${escHtml(u.user_id.toLowerCase())}"
+             data-status="${escHtml(u.status.toLowerCase())}">
+            <div class="ud-card">
+                <div class="ud-uid-block">
+                    <div class="ud-avatar">${escHtml(getInitials(u.full_name))}</div>
+                    <div class="ud-uid-text">${escHtml(u.user_id)}</div>
+                </div>
+                <div class="ud-info">
+                    <div class="ud-info-item">
+                        <span class="ud-info-label">Full Name</span>
+                        <span class="ud-info-value">${escHtml(u.full_name)}</span>
+                    </div>
+                    <div class="ud-info-item">
+                        <span class="ud-info-label">Username</span>
+                        <span class="ud-info-value">@${escHtml(u.username)}</span>
+                    </div>
+                    <div class="ud-info-item">
+                        <span class="ud-info-label">Email</span>
+                        <span class="ud-info-value">${escHtml(u.email)}</span>
+                    </div>
+                    <div class="ud-info-item">
+                        <span class="ud-info-label">Status</span>
+                        <span class="ud-info-value">${statusBadge}</span>
+                    </div>
+                </div>
+                <button class="ud-details-btn"
+                        data-uid="${escHtml(u.user_id)}"
+                        data-name="${escHtml(u.full_name)}">
+                    <i class="bi bi-person-lines-fill me-1"></i>View Details
+                </button>
+            </div>
+        </div>`;
+    }
+
+    /* ── Render filtered subset ───────────────────────────────── */
     function applyFilters() {
         const items = grid.querySelectorAll(".ud-item");
         let shown = 0;
@@ -515,12 +541,8 @@
                                 name.includes(currentSearch) ||
                                 uid.includes(currentSearch);
 
-            if (filterMatch && searchMatch) {
-                item.style.display = "";
-                shown++;
-            } else {
-                item.style.display = "none";
-            }
+            item.style.display = (filterMatch && searchMatch) ? "" : "none";
+            if (filterMatch && searchMatch) shown++;
         });
 
         if (shownBadge) shownBadge.textContent = shown;
@@ -528,6 +550,55 @@
             emptyState.style.display = (shown === 0 && items.length > 0) ? "block" : "none";
         }
     }
+
+    /* ── Fetch users from API on load ────────────────────────── */
+    async function loadUsers() {
+        try {
+            const res  = await fetch('/api/admin/list_users');
+            const data = await res.json();
+
+            const loading = document.getElementById("ud-loading");
+            if (loading) loading.remove();
+
+            if (data.status !== "SUCCESS") throw new Error(data.message || "API error");
+
+            allUsers = data.users || [];
+            const total = data.total || allUsers.length;
+
+            // Update counters
+            const totalEl       = document.getElementById("ud-total-count");
+            const totalInlineEl = document.getElementById("ud-total-inline");
+            if (totalEl)       totalEl.textContent       = total;
+            if (totalInlineEl) totalInlineEl.textContent = total;
+
+            if (allUsers.length === 0) {
+                grid.innerHTML = `
+                    <div style="text-align:center; padding:4rem 1rem; color:var(--text-muted);">
+                        <div style="font-size:3.5rem; margin-bottom:1rem; opacity:0.4;">📭</div>
+                        <p class="fw-bold text-bright mb-1">No user data available</p>
+                        <p style="font-size:0.9rem;">users.dat may be missing or empty.</p>
+                    </div>`;
+                return;
+            }
+
+            grid.innerHTML = allUsers.map(buildUserCard).join('');
+            if (shownBadge) shownBadge.textContent = allUsers.length;
+            applyFilters();
+
+        } catch (err) {
+            console.error("loadUsers error:", err);
+            const loading = document.getElementById("ud-loading");
+            if (loading) loading.remove();
+            grid.innerHTML = `
+                <div style="text-align:center; padding:4rem 1rem; color:var(--danger);">
+                    <i class="bi bi-exclamation-triangle" style="font-size:2.5rem;"></i>
+                    <p class="fw-bold mt-2 mb-1">Data Load Failed</p>
+                    <p style="font-size:0.85rem;">Could not reach /api/admin/list_users.</p>
+                </div>`;
+        }
+    }
+
+    window.addEventListener("load", loadUsers);
 
     /* ── Search (debounced 300ms) ─────────────────────────────── */
     let searchTimer = null;
@@ -551,46 +622,15 @@
         });
     });
 
-    /* ── Helpers ──────────────────────────────────────────────── */
-    function getInitials(name) {
-        if (!name) return "?";
-        const words = name.trim().split(/\s+/);
-        return words.length >= 2
-            ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
-            : words[0][0].toUpperCase();
-    }
-
-    function escHtml(str) {
-        if (!str) return "";
-        return str
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;");
-    }
-
-    /*
-     * formatAddress — converts multi-part address into one comma-separated line.
-     * Handles strings that may already use newlines, semicolons, or pipes as separators.
-     */
-    function formatAddress(raw) {
-    if (!raw) return "—";
-    return raw
-        .split(/[\n\r|;,]+/)
-        .map(s => s.trim())
-        .filter(Boolean)
-        .join("<br>");
-}
-
-    /* ── Build modal profile HTML ─────────────────────────────── */
+    /* ── buildProfileHTML + modal logic (unchanged) ───────────── */
     function buildProfileHTML(user) {
         const rows = [
-            { label: "User ID",   value: user.user_id,              mono: true  },
-            { label: "Username",  value: "@" + user.username                    },
-            { label: "Email",     value: user.email                             },
-            { label: "Phone",     value: user.phone                             },
-            { label: "Address",   value: formatAddress(user.address), html: true },
-            { label: "Status",    value: user.status,               badge: true },
+            { label: "User ID",  value: user.user_id,              mono: true  },
+            { label: "Username", value: "@" + user.username                    },
+            { label: "Email",    value: user.email                             },
+            { label: "Phone",    value: user.phone                             },
+            { label: "Address",  value: formatAddress(user.address), html: true },
+            { label: "Status",   value: user.status,               badge: true },
         ];
 
         let html = "";
@@ -608,7 +648,6 @@
             } else {
                 valHTML = `<span class="ud-profile-value">${escHtml(row.value || "—")}</span>`;
             }
-
             html += `
                 <div class="ud-profile-row">
                     <span class="ud-profile-label">${escHtml(row.label)}</span>
@@ -618,7 +657,6 @@
         return html;
     }
 
-    /* ── "View Details" click (delegated) ────────────────────── */
     const udModal     = new bootstrap.Modal(document.getElementById("ud-modal"));
     const modalBody   = document.getElementById("modal-body");
     const modalName   = document.getElementById("modal-name");
@@ -633,9 +671,9 @@
             const uid  = btn.dataset.uid  || "";
             const name = btn.dataset.name || "User";
 
-            if (modalName)   modalName.textContent   = name;
-            if (modalUidSub) modalUidSub.textContent  = uid;
-            if (modalAvatar) modalAvatar.textContent  = getInitials(name);
+            if (modalName)   modalName.textContent  = name;
+            if (modalUidSub) modalUidSub.textContent = uid;
+            if (modalAvatar) modalAvatar.textContent = getInitials(name);
 
             if (modalBody) {
                 modalBody.innerHTML = `
@@ -658,22 +696,18 @@
                 if (data.status === "SUCCESS" && data.user) {
                     if (modalBody) modalBody.innerHTML = buildProfileHTML(data.user);
                 } else {
-                    if (modalBody) {
-                        modalBody.innerHTML = `
-                            <div class="text-center py-3" style="color:var(--danger);">
-                                <i class="bi bi-exclamation-triangle me-1"></i>
-                                ${escHtml(data.message || "Could not load profile.")}
-                            </div>`;
-                    }
-                }
-            } catch (err) {
-                if (modalBody) {
-                    modalBody.innerHTML = `
+                    if (modalBody) modalBody.innerHTML = `
                         <div class="text-center py-3" style="color:var(--danger);">
-                            <i class="bi bi-wifi-off me-1"></i>
-                            Network error. Please try again.
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            ${escHtml(data.message || "Could not load profile.")}
                         </div>`;
                 }
+            } catch (err) {
+                if (modalBody) modalBody.innerHTML = `
+                    <div class="text-center py-3" style="color:var(--danger);">
+                        <i class="bi bi-wifi-off me-1"></i>
+                        Data Load Failed — network error.
+                    </div>`;
                 console.error("User detail fetch error:", err);
             }
         });

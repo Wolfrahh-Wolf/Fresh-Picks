@@ -1,40 +1,6 @@
 """
-app.py - Fresh Picks: Main Flask Application (v4 — Binary Storage Edition)
+app.py - Fresh Picks: Main Flask Application
 ============================================================================
-
-DEVELOPER NOTE: SSL, HTTPS & MULTI-DEVICE SETUP
-
-WHY HTTPS ON COLLEGE WI-FI?
-─────────────────────────
-    HTTP sends data as plain text. On a shared Wi-Fi network
-    (like a college lab or hotspot), anyone on the same network
-    can run a packet-sniffer (e.g. Wireshark) and read:
-    username=alice&password=Alice@123
-
-    HTTPS encrypts everything using SSL/TLS so it becomes:
-    Gx92#@!k%LpQ... (unreadable without our key.pem)
-
-SELF-SIGNED CERTIFICATE WARNING:
-───────────────────────────────
-    When you open https://<ip>:5000 on any browser, you will see:
-    "Your connection is not private"
-    NET::ERR_CERT_AUTHORITY_INVALID
-
-    This is EXPECTED. Our cert.pem is "self-signed" — we created
-    it ourselves rather than paying a Certificate Authority (CA)
-    like DigiCert or Let's Encrypt. Browsers don't trust unknown
-    issuers by default, so they warn you.
-
-HOW TO BYPASS (for demo):
-    Chrome/Edge: Click "Advanced" -> "Proceed to <IP> (unsafe)"
-    Firefox:     Click "Advanced" -> "Accept the Risk"
-    (Do this once per device per session.)
-
-ARCHITECTURE CHANGE (v4):
-    The C backend now reads/writes binary .dat files instead of
-    plain .txt files. All pipe-delimited stdout contracts between
-    the C binaries and this Flask app remain IDENTICAL — only the
-    internal storage mechanism changed. bridge.py is unchanged.
 
 ROUTES:
   GET  /                        -> Landing page (index.html)
@@ -74,18 +40,12 @@ ROUTES:
   GET  /api/download_receipt/<order_id> -> Generate and stream PDF receipt
   POST /api/get_admin_info      -> Return admin session data as JSON
 
-HOW TO RUN:
-  1. python generate_certs.py   (once, to create cert.pem + key.pem)
-  2. ./txt_to_bin_converter     (once, to migrate .txt files to .dat)
-  3. python app.py              (every time to start the server)
-
 Team: CodeCrafters | Project: Fresh Picks | SDP-1
 """
 
 import ssl
 import os
 import tempfile
-import sys
 import razorpay
 from datetime import datetime
 from config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
@@ -117,13 +77,13 @@ app = Flask(
 )
 
 
-
+# ─────────────────────────────────────────────────────────────
+# Secret Key
+# ─────────────────────────────────────────────────────────────
 app.secret_key = "fresh_picks_secret_codecrafters_2026"
 
 # ─────────────────────────────────────────────────────────────
-# SSL Certificate Paths
-# Built relative to this file so the server works regardless of
-# which directory you launch it from.
+# SSL Certificate Paths (Relative)
 # ─────────────────────────────────────────────────────────────
 _HERE     = os.path.dirname(os.path.abspath(__file__))
 CERT_FILE = os.path.join(_HERE, "cert.pem")
@@ -131,8 +91,7 @@ KEY_FILE  = os.path.join(_HERE, "key.pem")
 
 
 # =============================================================
-# PRIVATE HELPERS
-# Small, pure functions used only inside this module.
+# PRIVATE HELPERS FUNCTIONS
 # =============================================================
 
 def _safe_float(value, default=0.0):
@@ -211,13 +170,51 @@ def _parse_multiline_orders(raw_output):
 
     return orders
 
+def _parse_veg_line(line):
+    """
+    PURPOSE: Parse one pipe-delimited vegetable record into a dict.
+            Ensures stock, price, and validity are typed correctly for Jinja.
+    PARAMS:  line — one stripped line of raw C stdout output from list_products.
+    RETURNS: dict or None if the line is malformed.
+
+    SCHEMA:  veg_id|category|name|stock_g|price_per_1000g|tag|validity_days
+    """
+    parts = line.strip().split("|")
+    if len(parts) < 7: return None
+    return {
+        "veg_id":          parts[0],
+        "category":        parts[1],
+        "name":            parts[2],
+        "stock_g":         int(parts[3]),
+        "price_per_1000g": _safe_float(parts[4]),
+        "tag":             parts[5],
+        "validity_days":   int(parts[6])
+    }
+
+def _parse_promo_line(line):
+    """
+    PURPOSE: Parse one pipe-delimited promotional freebie record into a dict.
+            Used for rendering the admin promo management section.
+    PARAMS:  line — one stripped line of raw C stdout output from list_promo.
+    RETURNS: dict or None if the line has fewer than 5 fields.
+
+    SCHEMA:  vf_id|name|stock_g|min_trigger_amt|free_qty_g
+    """
+    parts = line.strip().split("|")
+    if len(parts) < 5: return None
+    return {
+        "vf_id":           parts[0],
+        "name":            parts[1],
+        "stock_g":         int(parts[2]),
+        "min_trigger_amt": _safe_float(parts[3]),
+        "free_qty_g":      int(parts[4])
+    }
 
 # =============================================================
 # PAGE ROUTES — Serve HTML templates
-# All routes apply a guard clause FIRST; if the check fails,
-# we return the redirect immediately without proceeding further.
 # =============================================================
 
+""" RAZORPAY """
 @app.after_request
 def set_security_headers(response):
     # Use wildcard (*) so the policy delegates down into Razorpay's
@@ -326,155 +323,31 @@ def admin_inventory():
     guard = _require_login(role="admin")
     if guard: return guard
 
-    # ── Fetch vegetable list ──────────────────────────────────
-    vegetables = []
-    veg_result = run_c_binary("order", ["list_products"])
-
-    if veg_result["status"] == "SUCCESS":
-        for line in veg_result["raw_output"].strip().split("\n")[1:]:
-            parts = line.split("|")
-            if len(parts) >= 7:
-                vegetables.append({
-                    "veg_id":          parts[0],
-                    "category":        parts[1],
-                    "name":            parts[2],
-                    "stock_g":         int(parts[3]),
-                    "price_per_1000g": float(parts[4]),
-                    "tag":             parts[5],
-                    "validity_days":   int(parts[6])
-                })
-
-    # ── Fetch promotional freebie list ───────────────────────
-    free_items   = []
-    promo_result = run_c_binary("inventory", ["list_promo"])
-
-    if promo_result["status"] == "SUCCESS":
-        for line in promo_result["raw_output"].strip().split("\n")[1:]:
-            parts = line.split("|")
-            if len(parts) >= 5:
-                free_items.append({
-                    "vf_id":           parts[0],
-                    "name":            parts[1],
-                    "stock_g":         int(parts[2]),
-                    "min_trigger_amt": float(parts[3]),
-                    "free_qty_g":      int(parts[4])
-                })
-
     return render_template(
         "admin_inventory.html",
-        vegetables = vegetables,
-        free_items = free_items,
         admin_name = session.get("admin_name", "Admin")
     )
 
-"""
-app.py — ADDITIONS FOR USER MANAGEMENT MODULE
-=============================================
-Paste these two blocks into app.py at the indicated positions.
-
-BLOCK 1 → Page route: add after the /admin_orders route (around line 368).
-BLOCK 2 → API routes: add before the "START THE SERVER" section at the bottom.
-
-Both blocks follow the exact same guard-clause + bridge-call pattern
-already used by /admin_inventory and /api/admin_orders in the existing app.py.
-
-Team: CodeCrafters | Project: Fresh Picks | SDP-1
-"""
-
-
-# =============================================================
-# BLOCK 1 — PAGE ROUTE
-# Add this after the existing /admin_orders page route.
-# =============================================================
-
 @app.route("/admin/users")
 def admin_users():
-    """
-    GET /admin/users  (admin only)
-
-    Calls users.exe list_users and passes the full user list to the
-    admin_users.html template as a Jinja variable so the page renders
-    server-side. Client-side JS then handles search/filter locally
-    without additional API calls, keeping the UI snappy.
-
-    Template context:
-      users       — list of user dicts
-      total_count — total users in the binary
-    """
     guard = _require_login(role="admin")
     if guard:
         return guard
 
-    users      = []
-    total_count = 0
-
-    result = run_c_binary("users", ["list_users"])
-
-    if result["status"] == "SUCCESS":
-        lines = result["raw_output"].strip().split("\n")
-
-        # lines[0] → "SUCCESS|<count>"
-        # lines[1+] → pipe-delimited user records
-        if lines:
-            header_parts = lines[0].split("|")
-            if len(header_parts) >= 2:
-                try:
-                    total_count = int(header_parts[1])
-                except ValueError:
-                    total_count = 0
-
-        for line in lines[1:]:
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split("|")
-            if len(parts) >= 7:
-                users.append({
-                    "user_id":   parts[0],
-                    "username":  parts[1],
-                    "full_name": parts[2],
-                    "email":     parts[3],
-                    "phone":     parts[4],
-                    "address":   parts[5],
-                    "status":    parts[6],
-                })
-
     return render_template(
         "admin_users.html",
-        users       = users,
-        total_count = total_count,
-        admin_name  = session.get("admin_name", "Admin"),
+        admin_name = session.get("admin_name", "Admin"),
     )
+
 
 @app.route("/admin_orders")
 def admin_orders():
     guard = _require_login(role="admin")
     if guard: return guard
 
-    # ── Determine the active delivery slot by current hour ───
-    current_hour = datetime.now().hour
-    if   7  <= current_hour <= 10: active_slot = "Morning"
-    elif 12 <= current_hour <= 14: active_slot = "Afternoon"
-    elif 17 <= current_hour <= 19: active_slot = "Evening"
-    else:                          active_slot = None
-
-    # ── JIT: auto-promote "Order Placed" → "Out for Delivery" ─
-    jit_promoted = 0
-    if active_slot:
-        # Change from "order" to "delivery"
-        jit_result = run_c_binary("delivery", ["batch_promote_slot", active_slot])
-        if jit_result["status"] == "SUCCESS":
-            try:
-                jit_promoted = int(jit_result["data"].strip())
-            except ValueError:
-                jit_promoted = 0
-
     return render_template(
         "admin_orders.html",
-        username     = session.get("username"),
-        admin_name   = session.get("admin_name", "Admin"),
-        jit_promoted = jit_promoted,
-        jit_slot     = active_slot or ""
+        admin_name = session.get("admin_name", "Admin")
     )
 
 
@@ -487,12 +360,6 @@ def serve_product_image(filename):
 
 # =============================================================
 # API ROUTES — Return JSON, called by JavaScript fetch()
-#
-# RELATIVE PATHS — WHY THIS MATTERS FOR HTTPS:
-#   All fetch() calls in HTML/JS use relative paths ("/api/...").
-#   A hardcoded "http://..." causes a "Mixed Content" error when
-#   the page is served over HTTPS. Relative paths inherit the
-#   current scheme+host automatically.
 # =============================================================
 
 @app.route("/api/login", methods=["POST"])
@@ -672,6 +539,33 @@ def api_change_password():
 
     return jsonify({"status": result["status"], "message": result["data"]})
 
+@app.route("/api/admin/inventory_data", methods=["GET"])
+def api_admin_inventory_data():
+    """
+    GET /api/admin/inventory_data  (admin only)
+    Calls ./order list_products & ./inventory list_promo
+    """
+    if session.get("role") != "admin":
+        return jsonify({"status": "ERROR", "message": "Admin only"}), 403
+
+    veg_raw   = run_c_binary("order",     ["list_products"])
+    promo_raw = run_c_binary("inventory", ["list_promo"])
+
+    vegetables = []
+    if veg_raw["status"] == "SUCCESS":
+        lines = veg_raw["raw_output"].strip().split("\n")
+        vegetables = [p for line in lines[1:] if (p := _parse_veg_line(line))]
+    
+    free_items = []
+    if promo_raw["status"] == "SUCCESS":
+        lines = promo_raw["raw_output"].strip().split("\n")
+        free_items = [p for line in lines[1:] if (p := _parse_promo_line(line))]
+
+    return jsonify({
+        "status":     "SUCCESS",
+        "vegetables": vegetables,
+        "free_items": free_items,
+    })
 
 @app.route("/api/list_products", methods=["GET"])
 def api_list_products():
@@ -850,43 +744,6 @@ def api_remove_item():
 
     result = run_c_binary("order", ["remove_item", session["user_id"], veg_id])
     return jsonify({"status": result["status"], "message": result["data"]})
-
-""" DEPRECATED """
-# @app.route("/api/checkout", methods=["POST"])
-# def api_checkout():
-#     """
-#     POST /api/checkout
-#     Body: { "delivery_slot": "Morning|Afternoon|Evening" }
-#     Calls: ./order checkout <user_id> <delivery_slot>
-
-#     C output (first line):
-#       SUCCESS|order_id|total|slot|boy_name|boy_phone|items_string
-#     """
-#     if "user_id" not in session:
-#         return jsonify({"status": "ERROR", "message": "Not logged in"})
-
-#     data = request.get_json() or {}
-#     slot = data.get("delivery_slot", "").strip()
-
-#     VALID_SLOTS = {"Morning", "Afternoon", "Evening"}
-#     if slot not in VALID_SLOTS:
-#         return jsonify({"status": "ERROR", "message": "Invalid slot"})
-
-#     result = run_c_binary("order", ["checkout", session["user_id"], slot])
-
-#     if result["status"] != "SUCCESS":
-#         return jsonify({"status": "ERROR", "message": result["data"]})
-
-#     parts = result["raw_output"].strip().split("\n")[0].split("|")
-#     return jsonify({
-#         "status":   "SUCCESS",
-#         "order_id": parts[1] if len(parts) > 1 else "",
-#         "total":    _safe_float(parts[2]) if len(parts) > 2 else 0.0,
-#         "slot":     parts[3] if len(parts) > 3 else "",
-#         "boy_name": parts[4] if len(parts) > 4 else "Unknown",
-#         "boy_phone":parts[5] if len(parts) > 5 else "N/A",
-#         "items":    parts[6] if len(parts) > 6 else ""
-#     })
 
 @app.route("/api/create_razorpay_order", methods=["POST"])
 def api_create_razorpay_order():
@@ -1098,6 +955,7 @@ def api_verify_and_checkout():
         "boy_phone":parts[5] if len(parts) > 5 else "N/A",
         "items":    parts[6] if len(parts) > 6 else ""
     })
+
 
 @app.route("/api/get_user_orders", methods=["POST"])
 def api_get_user_orders():
@@ -1371,10 +1229,6 @@ def api_download_receipt(order_id):
         download_name=filename
     )
 
-# =============================================================
-# BLOCK 2 — API ROUTES
-# Add these before the "START THE SERVER" section.
-# =============================================================
 
 @app.route("/api/admin/list_users", methods=["GET"])
 def api_admin_list_users():
