@@ -355,40 +355,19 @@
 
     {# ── User Card List ── #}
     <div class="d-flex flex-column gap-2" id="ud-grid">
-
-        {% if users %}
-            {# ── User Card List — populated by JS fetch() ── #}
-            <div class="d-flex flex-column gap-2" id="ud-grid">
-                <div id="ud-loading" style="text-align:center; padding:3rem; color:var(--text-muted);">
-                    <div class="spinner-border spinner-border-sm text-primary me-2"></div>
-                    Loading users…
-                </div>
-            </div>
-
-            {# ── Empty State (shown via JS when no cards match) ── #}
-            <div id="ud-empty">
-                <div class="ud-empty-icon">👤</div>
-                <p class="fw-bold text-bright mb-1">No users found</p>
-                <p>Try adjusting your search or filter.</p>
-            </div>
-        {% endif %}
-
+        {# This loading spinner is removed by JS once data arrives #}
+        <div id="ud-loading" style="text-align:center; padding:3rem; color:var(--text-muted);">
+            <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+            Loading users…
+        </div>
     </div>
 
-    {# ── Empty State (shown via JS when no cards match) ── #}
-    <div id="ud-empty">
-        <div class="ud-empty-icon">👤</div>
+    {# ── Empty State (Shown via JS only when search/filter returns 0) ── #}
+    <div id="ud-empty" style="display: none; text-align: center; padding: 4rem 1rem; color: var(--text-muted);">
+        <div class="ud-empty-icon" style="font-size: 3.5rem; margin-bottom: 1rem; opacity: 0.4;">👤</div>
         <p class="fw-bold text-bright mb-1">No users found</p>
         <p>Try adjusting your search or filter.</p>
     </div>
-
-    {% if not users %}
-    <div style="text-align:center; padding:4rem 1rem; color:var(--text-muted);">
-        <div style="font-size:3.5rem; margin-bottom:1rem; opacity:0.4;">📭</div>
-        <p class="fw-bold text-bright mb-1">No user data available</p>
-        <p style="font-size:0.9rem;">users.dat may be missing or empty. Check your data files.</p>
-    </div>
-    {% endif %}
 
 </div>
 
@@ -547,7 +526,7 @@
 
         if (shownBadge) shownBadge.textContent = shown;
         if (emptyState) {
-            emptyState.style.display = (shown === 0 && items.length > 0) ? "block" : "none";
+            emptyState.style.display = (shown === 0) ? "block" : "none";
         }
     }
 
@@ -605,10 +584,59 @@
     if (searchInput) {
         searchInput.addEventListener("input", function () {
             clearTimeout(searchTimer);
-            searchTimer = setTimeout(function () {
-                currentSearch = searchInput.value.trim().toLowerCase();
-                applyFilters();
-            }, 300);
+            
+            searchTimer = setTimeout(async function () {
+                const query = searchInput.value.trim();
+
+                // 1. If search is cleared, reload the full list from C
+                if (query === "") {
+                    await loadUsers();
+                    return;
+                }
+
+                // 2. Show loading spinner while C binary runs
+                grid.innerHTML = `
+                    <div style="text-align:center; padding:3rem; color:var(--text-muted);">
+                        <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                        Searching database...
+                    </div>`;
+                // Force empty state to hide while loading
+                if (emptyState) emptyState.style.display = "none";
+
+                // 3. Call the Python API which runs users.exe search_users
+                try {
+                    const res = await fetch('/api/admin/search_users', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: query })
+                    });
+                    const data = await res.json();
+                    
+                    if (data.status === "SUCCESS") {
+                        // Replace the master list with the search results
+                        allUsers = data.users || [];
+                        
+                        // Re-render the cards
+                        grid.innerHTML = allUsers.map(buildUserCard).join('');
+                        
+                        // Re-apply Active/Inactive tabs to trigger the empty state if 0 results
+                        applyFilters(); 
+                    } else {
+                        // Throw the EXACT message sent by the C backend
+                        throw new Error(data.message || "User not found.");
+                    }
+                } catch (err) {
+                    console.error("Backend search error:", err);
+                    
+                    // Display the backend's error message instead of a generic one
+                    grid.innerHTML = `
+                        <div style="text-align:center; padding:3rem; color:var(--danger);">
+                            <i class="bi bi-exclamation-triangle" style="font-size:2rem;"></i>
+                            <p class="mt-2 fw-bold mb-1">Search Failed</p>
+                            <p style="font-size:0.9rem; color:var(--text-muted);">${err.message}</p>
+                        </div>`;
+                }
+            }, 300); // Wait 300ms after user stops typing before hitting the backend
         });
     }
 
