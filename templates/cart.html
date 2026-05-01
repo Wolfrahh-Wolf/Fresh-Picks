@@ -957,7 +957,7 @@ function renderInvoicePreview() {
     const container = document.getElementById("prev-items-list");
     container.innerHTML = "";
     cartItems.forEach(item => {
-        const qtyKg      = (item.qty_g / 1000).toFixed(2);
+        const qtyDisplay = item.qty_g >= 1000 ? `${(item.qty_g / 1000).toFixed(2)} kg` : `${item.qty_g} g`;
         const pricePerKg = parseFloat(item.price_per_1000g) || 0;
         const rateDisplay = item.is_free ? "—" : `₹${pricePerKg.toFixed(2)}/kg`;
         const lineTotal   = (pricePerKg * item.qty_g) / 1000;
@@ -969,7 +969,7 @@ function renderInvoicePreview() {
                 ${item.is_free ? `<span style="color:var(--success); font-size:0.7rem; font-weight:700; margin-left:0.35rem;">🎁 FREE</span>` : ""}
             </span>
             <span style="flex-basis:18%; flex-shrink:0; text-align:right; color:#ffffff; font-size:0.8rem; white-space:nowrap;">${rateDisplay}</span>
-            <span style="flex-basis:18%; flex-shrink:0; text-align:right; color:#ffffff; font-size:0.88rem; white-space:nowrap;">${qtyKg} kg</span>
+            <span style="flex-basis:18%; flex-shrink:0; text-align:right; color:#ffffff; font-size:0.88rem; white-space:nowrap;">${qtyDisplay}</span>
             <span style="flex-basis:22%; flex-shrink:0; text-align:right; font-weight:600; font-size:0.88rem; white-space:nowrap;
                          color:${item.is_free ? 'var(--success)' : 'var(--accent-light)'};">${amtDisplay}</span>
         </div>`);
@@ -1245,7 +1245,7 @@ function renderReceipt(result) {
 
         const isFree     = priceSnap === 0 || id.startsWith("VF") || (match ? !!match.is_free : false);
         const pricePerKg = priceSnap > 0 ? priceSnap : (match ? parseFloat(match.price_per_1000g) || 0 : 0);
-        const qtyDisplay = `${(grams / 1000).toFixed(2)} kg`;
+        const qtyDisplay = grams >= 1000 ? `${(grams / 1000).toFixed(2)} kg` : `${grams} g`;
         const rateDisplay = isFree ? "—" : `₹${pricePerKg.toFixed(2)}/kg`;
 
         let lineAmount = "FREE";
