@@ -1,13 +1,11 @@
 """
 bridge.py - Fresh Picks: Python-to-C Communication Bridge
 ==========================================================
-This module provides ONE reusable function that ALL team members
-use to call C binaries. This avoids code duplication and prevents
-merge conflicts since everyone imports from this single file.
+This module provides ONE reusable function  to call C binaries.
 
 HOW IT WORKS:
-    1. Flask route calls run_c_binary("auth", ["login_user", "Yashwanth", "Yash@123"])
-    2. This function builds the shell command: ./auth login_user Yashwanth Yash@123
+    1. Flask route calls run_c_binary("auth", ["login_user", "User", "User@123"])
+    2. This function builds the shell command: ./auth login_user User User@123
     3. subprocess.run() executes the C binary
     4. The C binary prints to stdout: SUCCESS|U001
     5. We parse this and return a clean Python dict: {"status": "SUCCESS", "data": "U001"}
@@ -30,9 +28,9 @@ import os          # Used to build the correct file path
 # CONSTANT: Path to the backend folder where C binaries live.
 # os.path.dirname(__file__) gets the folder of THIS file (app/).
 # We then go up one level (..) and into backend/.
-# os.path.dirname(__file__) → /home/yash/project/app
-# os.path.join("/home/yash/project/app", "..", "backend")
-#             → /home/yash/project/backend 
+# os.path.dirname(__file__) → /home/user/project/app
+# os.path.join("/home/user/project/app", "..", "backend")
+#             → /home/user/project/backend 
 # ─────────────────────────────────────────────────────────────
 BACKEND_DIR = os.path.join(os.path.dirname(__file__), "..", "backend")
 
@@ -41,8 +39,6 @@ def run_c_binary(executable_name, args_list):
     """
     PURPOSE:
         The single, universal function to call any C binary.
-        All 5 team members should use THIS function instead of
-        writing their own subprocess calls.
 
     HOW IT WORKS:
         1. Builds the full path to the binary (e.g., ../backend/auth)
@@ -54,7 +50,7 @@ def run_c_binary(executable_name, args_list):
         executable_name (str): Name of the compiled binary.
                                 Example: "auth"
         args_list (list):       List of string arguments to pass.
-                                Example: ["login_user", "Yashwanth", "Yash@123"]
+                                Example: ["login_user", "User", "User@123"]
 
     RETURNS:
         dict with keys:
@@ -74,7 +70,7 @@ def run_c_binary(executable_name, args_list):
     binary_path = os.path.join(BACKEND_DIR, executable_name)
 
     # Step 2: Build the full command list
-    # Example: ["../backend/auth", "login_user", "Yashwanth", "Yash@123"]
+    # Example: ["../backend/auth", "login_user", "User", "User@123"]
     command = [binary_path] + args_list
 
     try:
