@@ -222,24 +222,13 @@
             <!-- Modal Body -->
             <div class="modal-body">
 
-                <!-- OTP Display Banner -->
+                <!-- OTP Delivery Banner -->
                 <div class="alert alert-info mb-4">
-                    <strong><i class="bi bi-info-circle me-1"></i>Demo Mode — OTP Generated</strong><br>
+                    <strong><i class="bi bi-envelope-check me-1"></i>Verification Code Sent</strong><br>
                     <span class="text-muted" style="font-size:0.85rem;">
-                        In production, this would be sent to your email/phone.
+                        We have sent a one-time password to your registered email address.
+                        The code remains valid for 10 minutes.
                     </span>
-                    <div style="margin-top:0.5rem;">
-                        Your verification code:
-                        <strong id="otpDisplay"
-                                style="font-family:var(--font-mono);
-                                       font-size:1.8rem;
-                                       color:var(--success);
-                                       letter-spacing:0.4em;
-                                       display:block;
-                                       margin-top:0.25rem;">
-                            0000
-                        </strong>
-                    </div>
                 </div>
 
                 <!-- OTP Alert (for wrong OTP) -->
@@ -260,6 +249,12 @@
             <!-- Modal Footer -->
             <div class="modal-footer"
                  style="border-top: 1px solid var(--border-color);">
+                <button type="button"
+                        class="btn btn-secondary"
+                        id="resendOtpBtn"
+                        onclick="resendRegisterOtp()">
+                    <i class="bi bi-arrow-repeat me-1"></i>Resend OTP
+                </button>
                 <button type="button"
                         class="btn btn-primary"
                         id="verifyOtpBtn"
@@ -286,9 +281,6 @@
      *   - Registration form validation and API call
      *   - OTP Modal display and verification
      */
-
-    /* The mock OTP for demo purposes */
-    const MOCK_OTP = "0000";
 
     /* Bootstrap Modal instance — initialized after DOM loads */
     let otpModal;
@@ -451,6 +443,14 @@
             if (result.status === "SUCCESS") {
                 /* Registration saved! Open the OTP modal */
                 document.getElementById("alertBox").classList.add("d-none");
+                document.getElementById("otpInput").value = "";
+                document.getElementById("verifyOtpBtn").disabled = false;
+                showOtpAlert(
+                    result.otp_sent
+                        ? `<i class="bi bi-envelope-check me-1"></i>${result.otp_message} (${result.user_email})`
+                        : `<i class="bi bi-exclamation-triangle me-1"></i>${result.otp_message}`,
+                    result.otp_sent ? "info" : "warning"
+                );
                 otpModal.show();
                 /* Focus the OTP input inside the modal */
                 setTimeout(() => document.getElementById("otpInput").focus(), 400);
@@ -477,7 +477,7 @@
      *           On success: close modal and redirect to login.
      *           On failure: show error inside the modal.
      */
-    function handleOtpVerify() {
+    async function handleOtpVerify() {
         const entered = document.getElementById("otpInput").value.trim();
 
         /* Show error inside modal if OTP field is empty */
@@ -486,28 +486,74 @@
             return;
         }
 
-        if (entered === MOCK_OTP) {
-            /* Correct OTP — registration is fully complete */
+        const verifyBtn = document.getElementById("verifyOtpBtn");
+        let isVerified = false;
+        verifyBtn.disabled = true;
+
+        try {
+            const response = await fetch("/api/verify_registration_otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ otp: entered })
+            });
+            const result = await response.json();
+
+            if (result.status !== "SUCCESS") {
+                showOtpAlert(
+                    `<i class="bi bi-x-circle me-1"></i>${result.message || "OTP verification failed."}`,
+                    "danger"
+                );
+                document.getElementById("otpInput").value = "";
+                document.getElementById("otpInput").focus();
+                return;
+            }
+
             showOtpAlert(
                 '<i class="bi bi-check-circle me-1"></i>Verified! Redirecting to login...',
                 "success"
             );
-            document.getElementById("verifyOtpBtn").disabled = true;
+            isVerified = true;
 
-            /* Redirect to login after a short delay so user sees the success message */
             setTimeout(() => {
                 otpModal.hide();
                 window.location.href = "/login/user";
             }, 1800);
 
-        } else {
-            /* Wrong OTP */
+        } catch (err) {
             showOtpAlert(
-                '<i class="bi bi-x-circle me-1"></i>Incorrect OTP. Try again. (Hint: 0000)',
-                "danger"
+                '<i class="bi bi-exclamation-triangle me-1"></i>Could not verify OTP right now. Please try again.',
+                "warning"
             );
-            document.getElementById("otpInput").value = "";
-            document.getElementById("otpInput").focus();
+        } finally {
+            if (!isVerified) verifyBtn.disabled = false;
+        }
+    }
+
+    async function resendRegisterOtp() {
+        const resendBtn = document.getElementById("resendOtpBtn");
+        resendBtn.disabled = true;
+
+        try {
+            const response = await fetch("/api/resend_registration_otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: "{}"
+            });
+            const result = await response.json();
+
+            showOtpAlert(
+                result.status === "SUCCESS"
+                    ? `<i class="bi bi-envelope-check me-1"></i>OTP resent to ${result.user_email}.`
+                    : `<i class="bi bi-exclamation-triangle me-1"></i>${result.message || "Could not resend OTP."}`,
+                result.status === "SUCCESS" ? "info" : "warning"
+            );
+        } catch (err) {
+            showOtpAlert(
+                '<i class="bi bi-exclamation-triangle me-1"></i>Could not resend OTP right now.',
+                "warning"
+            );
+        } finally {
+            resendBtn.disabled = false;
         }
     }
 

@@ -45,9 +45,10 @@ Team: CodeCrafters | Project: Fresh Picks | SDP-1
 
 import ssl
 import os
+import secrets
 import tempfile
 import razorpay
-from datetime import datetime
+from datetime import datetime, timedelta
 from config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
 
 from flask import (
@@ -66,6 +67,8 @@ from generate_receipt import generate_receipt
 from flask_cors import CORS
 
 _rzp_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+OTP_STORE = {}
+OTP_TTL_MINUTES = 10
 
 # ─────────────────────────────────────────────────────────────
 # Flask App Setup
@@ -209,6 +212,198 @@ def _parse_promo_line(line):
         "min_trigger_amt": _safe_float(parts[3]),
         "free_qty_g":      int(parts[4])
     }
+
+
+def _load_receipt_data(order_id):
+    """
+    PURPOSE: Fetch one order's receipt payload from the C receipt binary.
+    RETURNS: (receipt_data_dict, error_response_tuple_or_None)
+    """
+    result = run_c_binary("receipt", [order_id])
+
+    if result["status"] != "SUCCESS":
+        return None, (
+            jsonify({
+                "status":  "ERROR",
+                "message": result.get("data", "Could not fetch order data")
+            }),
+            404
+        )
+
+    raw   = result["raw_output"].strip().split("\n")[0]
+    parts = raw.split("|")
+
+    if len(parts) < 14:
+        return None, (
+            jsonify({
+                "status":  "ERROR",
+                "message": f"Malformed receipt data ({len(parts)} fields)"
+            }),
+            500
+        )
+
+    return {
+        "order_id":    parts[1],
+        "user_id":     parts[2],
+        "full_name":   parts[3],
+        "user_phone":  parts[4],
+        "user_email":  parts[5],
+        "address":     parts[6],
+        "slot":        parts[7],
+        "status":      parts[8],
+        "timestamp":   parts[9],
+        "boy_name":    parts[10],
+        "boy_phone":   parts[11],
+        "total":       _safe_float(parts[12]),
+        # items_string may itself contain "|" if item names do —
+        # join remaining parts back to preserve them.
+        "items_string": "|".join(parts[13:]),
+    }, None
+
+
+def _generate_receipt_pdf_file(receipt_data):
+    """
+    PURPOSE: Render a receipt PDF to a temp file and return its absolute path.
+    """
+    with tempfile.NamedTemporaryFile(
+        suffix=".pdf",
+        delete=False,
+        prefix=f"{receipt_data['order_id']}_{receipt_data['user_id']}_"
+    ) as tmp:
+        tmp_path = tmp.name
+
+    generate_receipt(receipt_data, tmp_path)
+    return tmp_path
+
+
+def _build_receipt_pdf(order_id):
+    """
+    PURPOSE: Shared helper for both download and email receipt flows.
+    RETURNS: (receipt_data_dict, pdf_path, error_response_tuple_or_None)
+    """
+    receipt_data, error_response = _load_receipt_data(order_id)
+    if error_response:
+        return None, None, error_response
+
+    try:
+        pdf_path = _generate_receipt_pdf_file(receipt_data)
+    except Exception as e:
+        return None, None, (
+            jsonify({
+                "status":  "ERROR",
+                "message": f"PDF generation failed: {str(e)}"
+            }),
+            500
+        )
+
+    return receipt_data, pdf_path, None
+
+
+def _cleanup_temp_file(path):
+    """
+    PURPOSE: Best-effort removal for generated receipt files.
+    """
+    if path and os.path.exists(path):
+        os.remove(path)
+
+
+def _purge_expired_otps():
+    """
+    PURPOSE: Remove expired OTP entries from the in-memory store.
+    """
+    now_ts = datetime.utcnow().timestamp()
+    expired_keys = [
+        key for key, value in OTP_STORE.items()
+        if value.get("expires_at", 0) <= now_ts
+    ]
+    for key in expired_keys:
+        OTP_STORE.pop(key, None)
+
+
+def _get_otp_client_token():
+    """
+    PURPOSE: Stable per-browser token so OTP values stay server-side.
+    """
+    client_token = session.get("otp_client_token")
+    if not client_token:
+        client_token = secrets.token_urlsafe(16)
+        session["otp_client_token"] = client_token
+    return client_token
+
+
+def _otp_store_key(flow_key):
+    """
+    PURPOSE: Namespaced key for one OTP flow in the in-memory store.
+    """
+    return f"{_get_otp_client_token()}:{flow_key}"
+
+
+def _generate_otp_code():
+    """
+    PURPOSE: Generate a 4-digit OTP for user-facing flows.
+    """
+    return f"{secrets.randbelow(10000):04d}"
+
+
+def _send_otp_email(recipient_email, otp_code, purpose, reference=""):
+    """
+    PURPOSE: Use the shared C mailer binary to send an OTP email.
+    """
+    args = ["otp", recipient_email, otp_code, purpose]
+    if reference:
+        args.append(reference)
+    return run_c_binary("mailer", args)
+
+
+def _start_otp_flow(flow_key, recipient_email, purpose, reference=""):
+    """
+    PURPOSE: Generate, store, and email an OTP for one flow.
+    """
+    _purge_expired_otps()
+
+    otp_code = _generate_otp_code()
+    OTP_STORE[_otp_store_key(flow_key)] = {
+        "otp": otp_code,
+        "recipient_email": recipient_email,
+        "purpose": purpose,
+        "reference": reference,
+        "expires_at": (
+            datetime.utcnow() + timedelta(minutes=OTP_TTL_MINUTES)
+        ).timestamp()
+    }
+    return _send_otp_email(recipient_email, otp_code, purpose, reference)
+
+
+def _get_otp_flow(flow_key):
+    """
+    PURPOSE: Return a non-expired OTP flow state, if present.
+    """
+    _purge_expired_otps()
+    return OTP_STORE.get(_otp_store_key(flow_key))
+
+
+def _clear_otp_flow(flow_key):
+    """
+    PURPOSE: Remove one OTP flow state after success or abandonment.
+    """
+    OTP_STORE.pop(_otp_store_key(flow_key), None)
+
+
+def _validate_otp_flow(flow_key, entered_code, reference=""):
+    """
+    PURPOSE: Check whether the user-entered OTP matches the stored one.
+    """
+    otp_state = _get_otp_flow(flow_key)
+    if not otp_state:
+        return False, "OTP expired or not found. Please request a new OTP."
+
+    if reference and otp_state.get("reference") != reference:
+        return False, "OTP context mismatch. Please request a new OTP."
+
+    if otp_state.get("otp") != entered_code:
+        return False, "Incorrect OTP. Please try again."
+
+    return True, ""
 
 # =============================================================
 # PAGE ROUTES — Serve HTML templates
@@ -442,8 +637,77 @@ def api_register():
     result  = run_c_binary("auth", ["register", username, password,
                                     full_name, email, phone, address])
 
-    message = "Registration successful" if result["status"] == "SUCCESS" else result["data"]
-    return jsonify({"status": result["status"], "message": message})
+    if result["status"] != "SUCCESS":
+        return jsonify({"status": "ERROR", "message": result["data"]})
+
+    otp_result = _start_otp_flow("register", email.strip(), "register", username.strip())
+
+    response = {
+        "status":   "SUCCESS",
+        "message":  "Registration successful",
+        "user_email": email.strip(),
+        "otp_sent": otp_result["status"] == "SUCCESS",
+        "otp_message": (
+            "Verification OTP sent to your registered email."
+            if otp_result["status"] == "SUCCESS"
+            else otp_result.get("data", "Could not send OTP email. Use resend OTP.")
+        )
+    }
+    return jsonify(response)
+
+
+@app.route("/api/verify_registration_otp", methods=["POST"])
+def api_verify_registration_otp():
+    """
+    POST /api/verify_registration_otp
+    Body: { "otp": "1234" }
+    Verifies the OTP generated during the registration flow.
+    """
+    data = request.get_json(silent=True) or {}
+    otp  = data.get("otp", "").strip()
+
+    if not otp:
+        return jsonify({"status": "ERROR", "message": "OTP is required"})
+
+    is_valid, message = _validate_otp_flow("register", otp)
+    if not is_valid:
+        return jsonify({"status": "ERROR", "message": message})
+
+    _clear_otp_flow("register")
+    return jsonify({"status": "SUCCESS", "message": "Registration OTP verified"})
+
+
+@app.route("/api/resend_registration_otp", methods=["POST"])
+def api_resend_registration_otp():
+    """
+    POST /api/resend_registration_otp
+    Re-issues the pending registration OTP to the same email address.
+    """
+    otp_state = _get_otp_flow("register")
+    if not otp_state:
+        return jsonify({
+            "status": "ERROR",
+            "message": "Registration OTP session expired. Please register again."
+        }), 400
+
+    otp_result = _start_otp_flow(
+        "register",
+        otp_state["recipient_email"],
+        otp_state["purpose"],
+        otp_state.get("reference", "")
+    )
+
+    if otp_result["status"] != "SUCCESS":
+        return jsonify({
+            "status": "ERROR",
+            "message": otp_result.get("data", "Could not resend OTP")
+        })
+
+    return jsonify({
+        "status": "SUCCESS",
+        "message": "OTP resent successfully",
+        "user_email": otp_state["recipient_email"]
+    })
 
 
 @app.route("/api/get_admin_info", methods=["POST"])
@@ -1077,6 +1341,99 @@ def api_promote_slot_orders():
     return jsonify({"status": "SUCCESS", "promoted": promoted})
 
 
+@app.route("/api/send_cancel_order_otp", methods=["POST"])
+def api_send_cancel_order_otp():
+    """
+    POST /api/send_cancel_order_otp
+    Body: { "order_id": "ORD1007" }
+    Emails a cancellation OTP to the owner of the order.
+    """
+    if session.get("role") != "user":
+        return jsonify({"status": "ERROR", "message": "Login required"}), 403
+
+    data     = request.get_json(silent=True) or {}
+    order_id = data.get("order_id", "").strip()
+
+    if not order_id:
+        return jsonify({"status": "ERROR", "message": "order_id is required"})
+
+    receipt_data, error_response = _load_receipt_data(order_id)
+    if error_response:
+        return error_response
+
+    if receipt_data["user_id"] != session.get("user_id"):
+        return jsonify({"status": "ERROR", "message": "Order does not belong to this user"}), 403
+
+    if receipt_data["status"] != "Order Placed":
+        return jsonify({
+            "status": "ERROR",
+            "message": "Only Order Placed orders can be cancelled"
+        }), 400
+
+    user_email = receipt_data.get("user_email", "").strip()
+    if not user_email or "@" not in user_email:
+        return jsonify({"status": "ERROR", "message": "No valid email found for this order"}), 400
+
+    flow_key   = f"cancel_order:{order_id}"
+    otp_result = _start_otp_flow(flow_key, user_email, "cancel_order", order_id)
+
+    if otp_result["status"] != "SUCCESS":
+        return jsonify({
+            "status": "ERROR",
+            "message": otp_result.get("data", "Could not send cancellation OTP")
+        })
+
+    return jsonify({
+        "status": "SUCCESS",
+        "message": "Cancellation OTP sent successfully",
+        "user_email": user_email
+    })
+
+
+@app.route("/api/cancel_order_with_otp", methods=["POST"])
+def api_cancel_order_with_otp():
+    """
+    POST /api/cancel_order_with_otp
+    Body: { "order_id": "ORD1007", "otp": "1234" }
+    Verifies the user's OTP before cancelling the order.
+    """
+    if session.get("role") != "user":
+        return jsonify({"status": "ERROR", "message": "Login required"}), 403
+
+    data     = request.get_json(silent=True) or {}
+    order_id = data.get("order_id", "").strip()
+    otp      = data.get("otp", "").strip()
+
+    if not order_id:
+        return jsonify({"status": "ERROR", "message": "order_id is required"})
+    if not otp:
+        return jsonify({"status": "ERROR", "message": "OTP is required"})
+
+    receipt_data, error_response = _load_receipt_data(order_id)
+    if error_response:
+        return error_response
+
+    if receipt_data["user_id"] != session.get("user_id"):
+        return jsonify({"status": "ERROR", "message": "Order does not belong to this user"}), 403
+
+    if receipt_data["status"] != "Order Placed":
+        return jsonify({
+            "status": "ERROR",
+            "message": "Only Order Placed orders can be cancelled"
+        }), 400
+
+    flow_key = f"cancel_order:{order_id}"
+    is_valid, message = _validate_otp_flow(flow_key, otp, reference=order_id)
+    if not is_valid:
+        return jsonify({"status": "ERROR", "message": message}), 400
+
+    result = run_c_binary("delivery", ["cancel_order", order_id])
+    if result["status"] == "SUCCESS":
+        _clear_otp_flow(flow_key)
+
+    return jsonify({"status": result["status"], "message": result.get("data", "")})
+
+
 @app.route("/api/cancel_order", methods=["POST"])
 def api_cancel_order():
     """
@@ -1165,69 +1522,79 @@ def api_download_receipt(order_id):
     if "user_id" not in session and session.get("role") != "admin":
         return jsonify({"status": "ERROR", "message": "Not logged in"}), 401
 
-    # ── Step 1: Call the receipt binary ──────────────────────
-    result = run_c_binary("receipt", [order_id])
-
-    if result["status"] != "SUCCESS":
-        return jsonify({
-            "status":  "ERROR",
-            "message": result.get("data", "Could not fetch order data")
-        }), 404
-
-    # ── Step 2: Parse the pipe-delimited output ───────────────
-    raw   = result["raw_output"].strip().split("\n")[0]
-    parts = raw.split("|")
-
-    # parts[0] = "SUCCESS", parts[1..13] = data fields
-    if len(parts) < 14:
-        return jsonify({
-            "status":  "ERROR",
-            "message": f"Malformed receipt data ({len(parts)} fields)"
-        }), 500
-
-    receipt_data = {
-        "order_id":    parts[1],
-        "user_id":     parts[2],
-        "full_name":   parts[3],
-        "user_phone":  parts[4],
-        "user_email":  parts[5],
-        "address":     parts[6],
-        "slot":        parts[7],
-        "status":      parts[8],
-        "timestamp":   parts[9],
-        "boy_name":    parts[10],
-        "boy_phone":   parts[11],
-        "total":       _safe_float(parts[12]),
-        # items_string may itself contain "|" if item names do —
-        # join remaining parts back to preserve them.
-        "items_string": "|".join(parts[13:]),
-    }
-
-    # ── Step 3: Generate the PDF to a temp file ───────────────
-    try:
-        with tempfile.NamedTemporaryFile(
-            suffix=".pdf",
-            delete=False,
-            prefix=f"{receipt_data['order_id']}_{receipt_data['user_id']}_"
-        ) as tmp:
-            tmp_path = tmp.name
-
-        generate_receipt(receipt_data, tmp_path)
-
-    except Exception as e:
-        return jsonify({
-            "status":  "ERROR",
-            "message": f"PDF generation failed: {str(e)}"
-        }), 500
+    receipt_data, tmp_path, error_response = _build_receipt_pdf(order_id)
+    if error_response:
+        return error_response
 
     # ── Step 4: Stream the PDF back to the browser ────────────
     filename = f"{receipt_data['order_id']}_{receipt_data['user_id']}.pdf"
-    return send_file(
+    response = send_file(
         tmp_path,
         mimetype="application/pdf",
         as_attachment=True,
         download_name=filename
     )
+    response.call_on_close(lambda: _cleanup_temp_file(tmp_path))
+    return response
+
+@app.route("/api/email_receipt", methods=["POST"])
+def api_email_receipt():
+    """
+    POST /api/email_receipt  (user login required)
+
+    PURPOSE:
+        Generates the same server-side PDF used by /api/download_receipt,
+        passes that temp file to the C mailer binary, then deletes it.
+
+    REQUEST:
+        JSON:
+          • order_id   — e.g. "ORD1007"
+
+    RESPONSE (JSON):
+        { "status": "SUCCESS", "message": "Email sent" }
+        { "status": "ERROR",   "message": "<reason>" }
+
+    RULE COMPLIANCE:
+        • Thin route — no business logic.
+        • Uses the same receipt-generation helper as download.
+        • run_c_binary() is the only call to the C layer.
+    """
+
+    # ── Session guard ────────────────────────────────────────────
+    if session.get("role") != "user":
+        return jsonify({"status": "ERROR", "message": "Login required"}), 403
+
+    data     = request.get_json(silent=True) or {}
+    order_id = data.get("order_id", "").strip()
+
+    if not order_id:
+        return jsonify({"status": "ERROR", "message": "order_id is required"})
+
+    receipt_data, tmp_path, error_response = _build_receipt_pdf(order_id)
+    if error_response:
+        return error_response
+
+    try:
+        if receipt_data["user_id"] != session.get("user_id"):
+            return jsonify({"status": "ERROR", "message": "Order does not belong to this user"}), 403
+
+        user_email = receipt_data.get("user_email", "").strip()
+        if not user_email or "@" not in user_email:
+            return jsonify({"status": "ERROR", "message": "No valid email found for this order"}), 400
+
+        result = run_c_binary("mailer", [user_email, tmp_path])
+    finally:
+        _cleanup_temp_file(tmp_path)
+
+    # ── Return the C binary's verdict verbatim ────────────────────
+    if result["status"] == "SUCCESS":
+        return jsonify({
+            "status": "SUCCESS",
+            "message": "Email sent",
+            "user_email": user_email
+        })
+    else:
+        return jsonify({"status": "ERROR", "message": result.get("data", "Mailer failed")})
 
 
 @app.route("/api/admin/list_users", methods=["GET"])
