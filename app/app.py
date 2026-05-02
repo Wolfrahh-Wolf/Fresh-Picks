@@ -311,17 +311,6 @@ def user_home():
     return render_template("user_home.html", username=session.get("username"))
 
 
-@app.route("/admin_dash")
-def admin_dash():
-    guard = _require_login(role="admin")
-    if guard: return guard
-
-    return render_template(
-        "admin_dash.html",
-        username   = session.get("username"),
-        admin_name = session.get("admin_name", "Admin")
-    )
-
 @app.route("/admin_analytics")
 def admin_analytics_page():
     """
