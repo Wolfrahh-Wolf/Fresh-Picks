@@ -323,7 +323,7 @@ def admin_dash():
     )
 
 @app.route("/admin_analytics")
-def admin_analytics():
+def admin_analytics_page():
     """
     GET /admin_analytics  (admin only)
  
@@ -418,7 +418,7 @@ def admin_orders():
     )
 
 @app.route("/admin/analytics")
-def admin_analytics():
+def admin_analytics_dashboard():
     """
     GET /admin/analytics  (admin only)
     Thin shell route — renders the analytics dashboard HTML.
