@@ -186,6 +186,32 @@ typedef struct {
     int   slot_priority;              /* 1=Morning, 2=Afternoon, 3=Evening */
 } Order;
 
+/* ─────────────────────────────────────────────
+   ANALYTICS STRUCT DEFINITIONS
+   ───────────────────────────────────────────── */
+typedef struct {
+    float total_revenue;
+    int   total_orders;
+    int   orders_placed;
+    int   orders_out;
+    int   orders_delivered;
+    int   orders_cancelled;
+    int   slot_morning;
+    int   slot_afternoon;
+    int   slot_evening;
+} OrderMetrics;
+
+typedef struct {
+    float total_stock_kg;
+    int   low_stock_items;
+} InventoryMetrics;
+
+typedef struct {
+    int total_users;
+    int active_delivery_boys;
+    int inactive_delivery_boys;
+} StaffMetrics;
+
 
 /* ═══════════════════════════════════════════════════════════════
    SECTION 5: SLL NODE STRUCTS

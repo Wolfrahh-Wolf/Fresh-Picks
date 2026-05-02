@@ -20,42 +20,55 @@ echo "================================================"
 cd "$(dirname "$0")"
 
 # ── 1. order binary ─────────────────────────────────────────────
-echo "[1/6] Compiling order..."
+echo "[1/7] Compiling order..."
 gcc -Wall -Wextra -o order order.c utils.c -lm
 echo "      ✓ order compiled successfully"
 
 # ── 2. auth binary ──────────────────────────────────────────────
-echo "[2/6] Compiling auth..."
+echo "[2/7] Compiling auth..."
 gcc -Wall -Wextra -o auth auth.c utils.c -lm
 echo "      ✓ auth compiled successfully"
 
 # ── 3. inventory binary ─────────────────────────────────────────
-echo "[3/6] Compiling inventory..."
+echo "[3/7] Compiling inventory..."
 gcc -Wall -Wextra -o inventory inventory.c utils.c -lm
 echo "      ✓ inventory compiled successfully"
 
 # ── 4. delivery binary ──────────────────────────────────────────
-echo "[4/6] Compiling delivery..."
+echo "[4/7] Compiling delivery..."
 gcc -Wall -Wextra -o delivery delivery.c utils.c -lm
 echo "      ✓ delivery compiled successfully"
 
 # ── 5. receipt binary ───────────────────────────────────────────
-echo "[5/6] Compiling receipt..."
+echo "[5/7] Compiling receipt..."
 gcc -Wall -Wextra -o receipt receipt.c utils.c -lm
 echo "      ✓ receipt compiled successfully"
-# gcc -Wall -Wextra -o receipt receipt.c -lm
 
 # ── 6. users binary ───────────────────────────────────────────
-echo "[6/6] Compiling users..."
+echo "[6/7] Compiling users..."
 gcc -Wall -Wextra -o users users.c utils.c -lm
 echo "      ✓ users compiled successfully"
-# gcc -Wall -Wextra -o users users.c -lm
+
+# ── 7. analytics binary ───────────────────────────────────────────
+echo "[7/7] Compiling users..."
+gcc -Wall -Wextra -o analytics analytics.c utils.c -lm
+echo "      ✓ analytics compiled successfully"
 
 # ── Create the carts/ directory if it doesn't exist ─────────────
 echo ""
 echo "[Setup] Creating carts/ directory..."
 mkdir -p carts
 echo "        ✓ carts/ directory ready"
+
+echo ""
+echo "  All binaries compiled successfully!"
+
+# echo ""
+# echo "  Starting Flask Server..."
+
+# # ── Run app.py via PowerShell
+# cd ../app
+# python app.py
 
 echo ""
 echo "================================================"

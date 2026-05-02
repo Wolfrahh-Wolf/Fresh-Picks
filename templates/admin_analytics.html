@@ -1,0 +1,1384 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics | Fresh Picks Admin{% endblock %} 
+
+{% block extra_head %}
+<style>
+  /* ══════════════════════════════════════════════════════════════
+   §1 · PAGE HEADER
+   ══════════════════════════════════════════════════════════════ */
+  .an-header {
+    background: linear-gradient(
+      135deg,
+      rgba(0, 122, 204, 0.14) 0%,
+      rgba(0, 122, 204, 0.04) 100%
+    );
+    border: 1px solid rgba(0, 122, 204, 0.22);
+    border-radius: var(--radius-lg);
+    padding: 1.6rem 2rem;
+    margin-bottom: 1.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .an-header-title {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+  }
+  .an-header-sub {
+    font-size: 0.83rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+  }
+  .an-refresh-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 1.1rem;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--accent);
+    font-size: 0.83rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      background var(--transition),
+      color var(--transition);
+    white-space: nowrap;
+  }
+  .an-refresh-btn:hover {
+    background: var(--accent);
+    color: #fff;
+  }
+  .an-refresh-btn.spinning .bi {
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+   §2 · HERO KPI CARDS (Row A)
+   ══════════════════════════════════════════════════════════════ */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  @media (max-width: 900px) {
+    .kpi-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+  @media (max-width: 500px) {
+    .kpi-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .kpi-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem 1.35rem 1.1rem;
+    position: relative;
+    overflow: hidden;
+    transition:
+      transform var(--transition),
+      box-shadow var(--transition);
+  }
+  .kpi-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  }
+  /* Left accent stripe */
+  .kpi-card::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+    background: var(--kpi-accent, var(--accent));
+  }
+  .kpi-icon {
+    font-size: 1.6rem;
+    margin-bottom: 0.6rem;
+    display: block;
+    opacity: 0.85;
+  }
+  .kpi-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+  }
+  .kpi-value {
+    font-size: 1.85rem;
+    font-weight: 700;
+    color: var(--kpi-accent, var(--accent));
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi-sub {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 0.35rem;
+  }
+
+  /* Skeleton shimmer */
+  .skel {
+    background: linear-gradient(
+      90deg,
+      var(--bg-elevated) 25%,
+      var(--border-color) 50%,
+      var(--bg-elevated) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 4px;
+    display: inline-block;
+  }
+  @keyframes shimmer {
+    to {
+      background-position: -200% 0;
+    }
+  }
+  .skel-val {
+    width: 90px;
+    height: 2rem;
+  }
+  .skel-sub {
+    width: 60px;
+    height: 0.7rem;
+    margin-top: 0.35rem;
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+   §3 · MIDDLE ROW — B (Orders) + D (Fleet)
+   ══════════════════════════════════════════════════════════════ */
+  .an-mid-grid {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  @media (max-width: 768px) {
+    .an-mid-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .an-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .an-panel-header {
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.9rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+  }
+  .an-panel-header .bi {
+    color: var(--accent);
+    font-size: 1rem;
+  }
+  .an-panel-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+  }
+  .an-panel-body {
+    padding: 1.1rem 1.25rem;
+  }
+
+  /* ── Progress bars (Order status / Slot) ── */
+  .an-bar-section {
+    margin-bottom: 1.1rem;
+  }
+  .an-bar-section:last-child {
+    margin-bottom: 0;
+  }
+  .an-bar-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.35rem;
+  }
+  .an-bar-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .an-bar-count {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  .an-bar-track {
+    height: 7px;
+    background: var(--bg-elevated);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .an-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--fill-color, var(--accent));
+    transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 0%;
+  }
+
+  /* Divider between sections */
+  .an-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 0.9rem 0;
+  }
+  .an-section-tag {
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--text-muted);
+    margin-bottom: 0.6rem;
+  }
+
+  /* ── Fleet dots ── */
+  .fleet-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--bg-elevated);
+  }
+  .fleet-row:last-child {
+    border-bottom: none;
+  }
+  .fleet-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .fleet-dot--active {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+  }
+  .fleet-dot--inactive {
+    background: var(--danger);
+    box-shadow: 0 0 6px var(--danger);
+  }
+  .fleet-dot--total {
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+  }
+  .fleet-label {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    flex: 1;
+  }
+  .fleet-val {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  .fleet-capacity-bar {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+  }
+  .fleet-cap-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-bottom: 0.4rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .fleet-cap-track {
+    height: 6px;
+    background: var(--bg-elevated);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .fleet-cap-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--success), #4ec9b0);
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 0%;
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+   §4 · INVENTORY PANEL (Row C) — full-width, danger glow on alert
+   ══════════════════════════════════════════════════════════════ */
+  .inv-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    transition:
+      border-color 0.4s,
+      box-shadow 0.4s;
+  }
+  .inv-panel.low-stock-alert {
+    border-color: var(--danger) !important;
+    box-shadow: 0 0 20px rgba(244, 71, 71, 0.18);
+  }
+  .inv-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+  }
+  @media (max-width: 600px) {
+    .inv-stat-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .inv-stat-cell {
+    padding: 1.1rem 1.4rem;
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .inv-stat-cell:last-child {
+    border-right: none;
+  }
+  .inv-stat-icon {
+    font-size: 1.4rem;
+  }
+  .inv-stat-label {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    font-weight: 600;
+  }
+  .inv-stat-val {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+  .inv-alert-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: rgba(244, 71, 71, 0.12);
+    border: 1px solid rgba(244, 71, 71, 0.35);
+    color: var(--danger);
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2em 0.65em;
+    margin-top: 0.3rem;
+    width: fit-content;
+  }
+  .inv-ok-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: rgba(40, 167, 69, 0.12);
+    border: 1px solid rgba(40, 167, 69, 0.3);
+    color: var(--success);
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2em 0.65em;
+    margin-top: 0.3rem;
+    width: fit-content;
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+   §5 · RECENT ORDERS TABLE (Row E)
+   ══════════════════════════════════════════════════════════════ */
+  .an-table-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+  .an-table-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    align-items: center;
+    padding: 0.85rem 1.25rem;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-color);
+  }
+  .an-tbl-search-wrap {
+    position: relative;
+    flex: 1 1 200px;
+  }
+  .an-tbl-search-wrap .bi-search {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    pointer-events: none;
+  }
+  #an-tbl-search {
+    width: 100%;
+    padding: 0.38rem 0.85rem 0.38rem 2.1rem;
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: var(--radius);
+    font-size: 0.83rem;
+    transition: border-color var(--transition);
+  }
+  #an-tbl-search:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.15);
+  }
+  #an-tbl-search::placeholder {
+    color: var(--text-muted);
+  }
+
+  .an-status-chip {
+    padding: 0.28rem 0.75rem;
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.16s;
+    white-space: nowrap;
+  }
+  .an-status-chip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .an-status-chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  #an-tbl-shown {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    margin-left: auto;
+  }
+
+  /* Table */
+  .an-table-scroll {
+    overflow-x: auto;
+  }
+  table.an-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    min-width: 640px;
+  }
+  .an-table thead tr {
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-color);
+  }
+  .an-table th {
+    padding: 0.65rem 1rem;
+    text-align: left;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    white-space: nowrap;
+  }
+  .an-table td {
+    padding: 0.7rem 1rem;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--bg-elevated);
+    vertical-align: middle;
+  }
+  .an-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .an-table tbody tr:hover td {
+    background: var(--bg-elevated);
+  }
+
+  .an-order-id {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    color: var(--accent);
+    background: rgba(0, 122, 204, 0.1);
+    border: 1px solid rgba(0, 122, 204, 0.2);
+    padding: 0.15em 0.45em;
+    border-radius: 4px;
+  }
+  .an-amount {
+    font-weight: 700;
+  }
+
+  /* Status badges — reuse pattern from admin_users */
+  .an-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.2em 0.6em;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .an-badge--placed {
+    background: rgba(0, 122, 204, 0.15);
+    color: var(--accent);
+    border: 1px solid rgba(0, 122, 204, 0.3);
+  }
+  .an-badge--ofd {
+    background: rgba(204, 167, 0, 0.15);
+    color: var(--warning);
+    border: 1px solid rgba(204, 167, 0, 0.35);
+  }
+  .an-badge--delivered {
+    background: rgba(40, 167, 69, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(40, 167, 69, 0.3);
+  }
+  .an-badge--cancelled {
+    background: rgba(244, 71, 71, 0.12);
+    color: var(--danger);
+    border: 1px solid rgba(244, 71, 71, 0.3);
+  }
+
+  /* Empty / error states for table */
+  .an-tbl-state {
+    text-align: center;
+    padding: 3.5rem 1rem;
+    color: var(--text-muted);
+  }
+  .an-tbl-state .an-state-icon {
+    font-size: 2.8rem;
+    margin-bottom: 0.75rem;
+    opacity: 0.5;
+  }
+  .an-tbl-state p {
+    font-size: 0.88rem;
+    margin: 0;
+  }
+  .an-tbl-state .an-state-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+    font-size: 0.95rem;
+  }
+
+  /* ── Global error banner ── */
+  .an-error-banner {
+    display: none;
+    background: rgba(244, 71, 71, 0.09);
+    border: 1px solid rgba(244, 71, 71, 0.35);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem 1.5rem;
+    text-align: center;
+    color: var(--danger);
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+  }
+</style>
+{% endblock %} {% block content %}
+<div class="container-fluid px-4" style="max-width: 1400px; margin: 0 auto">
+  <!-- ══════════════════════════════════════════════════
+         PAGE HEADER
+         ══════════════════════════════════════════════════ -->
+  <div class="an-header">
+    <div>
+      <h1 class="an-header-title">
+        <i class="bi bi-bar-chart-line me-2" style="color: var(--accent)"></i
+        >Analytics Dashboard
+      </h1>
+      <p class="an-header-sub">Live platform metrics — all-time view</p>
+    </div>
+    <button
+      class="an-refresh-btn"
+      id="an-refresh-btn"
+    >
+      <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+  </div>
+
+  <!-- Global error banner (hidden until needed) -->
+  <div class="an-error-banner" id="an-error-banner">
+    <i class="bi bi-exclamation-triangle me-2"></i>
+    <span id="an-error-msg">Failed to load analytics data.</span>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+         ROW A · HERO KPI CARDS
+         ══════════════════════════════════════════════════ -->
+  <div class="kpi-grid">
+    <!-- Total Revenue -->
+    <div class="kpi-card" style="--kpi-accent: #4ec9b0">
+      <span class="kpi-icon">💰</span>
+      <div class="kpi-label">Total Revenue</div>
+      <div class="kpi-value" id="kpi-revenue">
+        <span class="skel skel-val"></span>
+      </div>
+      <div class="kpi-sub" id="kpi-revenue-sub">
+        <span class="skel skel-sub"></span>
+      </div>
+    </div>
+
+    <!-- Total Orders -->
+    <div class="kpi-card" style="--kpi-accent: var(--accent)">
+      <span class="kpi-icon">📦</span>
+      <div class="kpi-label">Total Orders</div>
+      <div class="kpi-value" id="kpi-orders">
+        <span class="skel skel-val"></span>
+      </div>
+      <div class="kpi-sub" id="kpi-orders-sub">
+        <span class="skel skel-sub"></span>
+      </div>
+    </div>
+
+    <!-- Average Order Value -->
+    <div class="kpi-card" style="--kpi-accent: #cca700">
+      <span class="kpi-icon">📊</span>
+      <div class="kpi-label">Avg. Order Value</div>
+      <div class="kpi-value" id="kpi-aov">
+        <span class="skel skel-val"></span>
+      </div>
+      <div class="kpi-sub" id="kpi-aov-sub">
+        <span class="skel skel-sub"></span>
+      </div>
+    </div>
+
+    <!-- Total Users -->
+    <div class="kpi-card" style="--kpi-accent: #c586c0">
+      <span class="kpi-icon">👥</span>
+      <div class="kpi-label">Total Customers</div>
+      <div class="kpi-value" id="kpi-users">
+        <span class="skel skel-val"></span>
+      </div>
+      <div class="kpi-sub" id="kpi-users-sub">
+        <span class="skel skel-sub"></span>
+      </div>
+    </div>
+  </div>
+  <!-- /.kpi-grid -->
+
+  <!-- ══════════════════════════════════════════════════
+         ROW B+D · ORDER PIPELINE  +  FLEET
+         ══════════════════════════════════════════════════ -->
+  <div class="an-mid-grid">
+    <!-- ── Panel B: Order Pipeline ── -->
+    <div class="an-panel">
+      <div class="an-panel-header">
+        <i class="bi bi-diagram-3"></i>
+        <h2 class="an-panel-title">Order Pipeline</h2>
+      </div>
+      <div class="an-panel-body">
+        <!-- Status breakdown -->
+        <div class="an-section-tag">Status Breakdown</div>
+
+        <div class="an-bar-section">
+          <div class="an-bar-label-row">
+            <span class="an-bar-label">✅ Delivered</span>
+            <span class="an-bar-count" id="bar-delivered-count">—</span>
+          </div>
+          <div class="an-bar-track">
+            <div
+              class="an-bar-fill"
+              id="bar-delivered"
+              style="--fill-color: #28a745"
+            ></div>
+          </div>
+        </div>
+
+        <div class="an-bar-section">
+          <div class="an-bar-label-row">
+            <span class="an-bar-label">🚚 Out for Delivery</span>
+            <span class="an-bar-count" id="bar-ofd-count">—</span>
+          </div>
+          <div class="an-bar-track">
+            <div
+              class="an-bar-fill"
+              id="bar-ofd"
+              style="--fill-color: #cca700"
+            ></div>
+          </div>
+        </div>
+
+        <div class="an-bar-section">
+          <div class="an-bar-label-row">
+            <span class="an-bar-label">🕐 Order Placed</span>
+            <span class="an-bar-count" id="bar-placed-count">—</span>
+          </div>
+          <div class="an-bar-track">
+            <div
+              class="an-bar-fill"
+              id="bar-placed"
+              style="--fill-color: var(--accent)"
+            ></div>
+          </div>
+        </div>
+
+        <div class="an-bar-section">
+          <div class="an-bar-label-row">
+            <span class="an-bar-label">❌ Cancelled</span>
+            <span class="an-bar-count" id="bar-cancelled-count">—</span>
+          </div>
+          <div class="an-bar-track">
+            <div
+              class="an-bar-fill"
+              id="bar-cancelled"
+              style="--fill-color: #f44747"
+            ></div>
+          </div>
+        </div>
+
+        <div class="an-divider"></div>
+
+        <!-- Delivery slot breakdown -->
+        <div class="an-section-tag">Slot Popularity</div>
+
+        <div class="an-bar-section">
+          <div class="an-bar-label-row">
+            <span class="an-bar-label">🌅 Morning</span>
+            <span class="an-bar-count" id="bar-morning-count">—</span>
+          </div>
+          <div class="an-bar-track">
+            <div
+              class="an-bar-fill"
+              id="bar-morning"
+              style="--fill-color: #4ec9b0"
+            ></div>
+          </div>
+        </div>
+
+        <div class="an-bar-section">
+          <div class="an-bar-label-row">
+            <span class="an-bar-label">☀️ Afternoon</span>
+            <span class="an-bar-count" id="bar-afternoon-count">—</span>
+          </div>
+          <div class="an-bar-track">
+            <div
+              class="an-bar-fill"
+              id="bar-afternoon"
+              style="--fill-color: #cca700"
+            ></div>
+          </div>
+        </div>
+
+        <div class="an-bar-section">
+          <div class="an-bar-label-row">
+            <span class="an-bar-label">🌙 Evening</span>
+            <span class="an-bar-count" id="bar-evening-count">—</span>
+          </div>
+          <div class="an-bar-track">
+            <div
+              class="an-bar-fill"
+              id="bar-evening"
+              style="--fill-color: #c586c0"
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- /.an-panel (B) -->
+
+    <!-- ── Panel D: Fleet & Logistics ── -->
+    <div class="an-panel">
+      <div class="an-panel-header">
+        <i class="bi bi-truck"></i>
+        <h2 class="an-panel-title">Fleet & Logistics</h2>
+      </div>
+      <div class="an-panel-body">
+        <div class="fleet-row">
+          <span class="fleet-dot fleet-dot--total"></span>
+          <span class="fleet-label">Total Delivery Boys</span>
+          <span class="fleet-val" id="fleet-total">—</span>
+        </div>
+        <div class="fleet-row">
+          <span class="fleet-dot fleet-dot--active"></span>
+          <span class="fleet-label">Active</span>
+          <span
+            class="fleet-val"
+            id="fleet-active"
+            style="color: var(--success)"
+            >—</span
+          >
+        </div>
+        <div class="fleet-row">
+          <span class="fleet-dot fleet-dot--inactive"></span>
+          <span class="fleet-label">Inactive</span>
+          <span
+            class="fleet-val"
+            id="fleet-inactive"
+            style="color: var(--danger)"
+            >—</span
+          >
+        </div>
+
+        <div class="an-divider"></div>
+        <div class="an-section-tag">Pending vs Capacity</div>
+
+        <div class="fleet-row" style="padding: 0.4rem 0">
+          <span style="font-size: 0.78rem; color: var(--text-muted); flex: 1"
+            >Orders Placed</span
+          >
+          <span
+            class="fleet-val"
+            id="fleet-pending"
+            style="font-size: 0.95rem; color: var(--accent)"
+            >—</span
+          >
+        </div>
+        <div class="fleet-row" style="padding: 0.4rem 0; border-bottom: none">
+          <span style="font-size: 0.78rem; color: var(--text-muted); flex: 1"
+            >Active Drivers Available</span
+          >
+          <span
+            class="fleet-val"
+            id="fleet-avail"
+            style="font-size: 0.95rem; color: var(--success)"
+            >—</span
+          >
+        </div>
+      </div>
+    </div>
+    <!-- /.an-panel (D) -->
+  </div>
+  <!-- /.an-mid-grid -->
+
+  <!-- ══════════════════════════════════════════════════
+         ROW C · INVENTORY HEALTH (full-width)
+         ══════════════════════════════════════════════════ -->
+  <div class="inv-panel" id="inv-panel">
+    <div class="an-panel-header">
+      <i class="bi bi-boxes"></i>
+      <h2 class="an-panel-title">Inventory Health</h2>
+      <span
+        id="inv-alert-label"
+        style="margin-left: auto; display: none"
+        class="an-badge an-badge--cancelled"
+      >
+        <i class="bi bi-exclamation-triangle-fill"></i>&nbsp;Low Stock Alert
+      </span>
+    </div>
+    <div class="inv-stat-grid">
+      <div class="inv-stat-cell">
+        <span class="inv-stat-icon">⚖️</span>
+        <div class="inv-stat-label">Total Stock</div>
+        <div class="inv-stat-val" id="inv-stock-kg">
+          <span class="skel skel-val"></span>
+        </div>
+        <div
+          style="
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+          "
+        >
+          kilograms on hand
+        </div>
+      </div>
+
+      <div class="inv-stat-cell">
+        <span class="inv-stat-icon">⚠️</span>
+        <div class="inv-stat-label">Low Stock Items</div>
+        <div class="inv-stat-val" id="inv-low-stock">
+          <span class="skel skel-val"></span>
+        </div>
+        <div id="inv-low-badge" style="margin-top: 0.3rem"></div>
+      </div>
+
+      <div class="inv-stat-cell">
+        <span class="inv-stat-icon">📉</span>
+        <div class="inv-stat-label">Cancellation Loss</div>
+        <div class="inv-stat-val" id="inv-cancel-loss">
+          <span class="skel skel-val"></span>
+        </div>
+        <div
+          style="
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+          "
+        >
+          revenue lost to cancellations
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- /.inv-panel -->
+
+  <!-- ══════════════════════════════════════════════════
+         ROW E · RECENT ORDERS TABLE (in-memory filter)
+         ══════════════════════════════════════════════════ -->
+  <div class="an-table-panel">
+    <!-- Toolbar -->
+    <div class="an-table-toolbar">
+      <div class="an-tbl-search-wrap">
+        <i class="bi bi-search"></i>
+        <input
+          type="text"
+          id="an-tbl-search"
+          placeholder="Search order ID, user, slot…"
+          autocomplete="off"
+        />
+      </div>
+      <div style="display: flex; gap: 0.4rem; flex-wrap: wrap">
+        <button class="an-status-chip active" data-filter="all">All</button>
+        <button class="an-status-chip" data-filter="Order Placed">
+          Placed
+        </button>
+        <button class="an-status-chip" data-filter="Out for Delivery">
+          OFD
+        </button>
+        <button class="an-status-chip" data-filter="Delivered">
+          Delivered
+        </button>
+        <button class="an-status-chip" data-filter="Cancelled">
+          Cancelled
+        </button>
+      </div>
+      <span id="an-tbl-shown">— orders</span>
+    </div>
+
+    <!-- Table -->
+    <div class="an-table-scroll">
+      <table class="an-table">
+        <thead>
+          <tr>
+            <th>Order ID</th>
+            <th>User ID</th>
+            <th>Amount</th>
+            <th>Slot</th>
+            <th>Status</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody id="an-tbl-body">
+          <!-- Loading skeleton rows -->
+          <tr>
+            <td colspan="6">
+              <div class="an-tbl-state">
+                <div
+                  class="spinner-border spinner-border-sm text-primary me-2"
+                  style="opacity: 0.5"
+                ></div>
+                <span style="font-size: 0.88rem">Loading analytics data…</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <!-- /.an-table-panel -->
+</div>
+<!-- /.container-fluid -->
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+
+  (function () {
+    "use strict";
+
+    /* ────────────────────────────────────────────────────────────
+       IN-MEMORY STATE
+       allOrders  — master copy from API (never mutated)
+       viewOrders — filtered+searched subset (re-built on each change)
+    ────────────────────────────────────────────────────────────── */
+    let allOrders = [];
+    let currentFilter = "all";
+    let currentSearch = "";
+
+    /* ────────────────────────────────────────────────────────────
+       DOM REFS
+    ────────────────────────────────────────────────────────────── */
+    const errBanner = document.getElementById("an-error-banner");
+    const errMsg = document.getElementById("an-error-msg");
+    const refreshBtn = document.getElementById("an-refresh-btn");
+    const tblBody = document.getElementById("an-tbl-body");
+    const tblShown = document.getElementById("an-tbl-shown");
+    const searchInput = document.getElementById("an-tbl-search");
+
+    /* ════════════════════════════════════════════════════════════
+       HELPERS
+    ════════════════════════════════════════════════════════════ */
+
+    function fmtINR(val) {
+      /* Format a float as ₹ with Indian locale comma grouping */
+      return (
+        "₹" +
+        Number(val).toLocaleString("en-IN", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      );
+    }
+
+    function setBar(fillId, countId, value, total) {
+      /* Animate a progress bar and set its count label */
+      const pct = total > 0 ? Math.min(100, (value / total) * 100) : 0;
+      const fill = document.getElementById(fillId);
+      const count = document.getElementById(countId);
+      if (fill) {
+        requestAnimationFrame(() => {
+          fill.style.width = pct + "%";
+        });
+      }
+      if (count) count.textContent = value;
+    }
+
+    function setText(id, text) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+
+    function setHTML(id, html) {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = html;
+    }
+
+    function statusBadge(status) {
+      const map = {
+        "Order Placed": "an-badge--placed",
+        "Out for Delivery": "an-badge--ofd",
+        Delivered: "an-badge--delivered",
+        Cancelled: "an-badge--cancelled",
+      };
+      const cls = map[status] || "an-badge--placed";
+      return `<span class="an-badge ${cls}">${escHtml(status)}</span>`;
+    }
+
+    function escHtml(str) {
+      return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       TABLE RENDERING — in-memory filter + search
+    ════════════════════════════════════════════════════════════ */
+
+    function buildOrderRow(o) {
+      return `<tr>
+            <td><span class="an-order-id">${escHtml(o.order_id)}</span></td>
+            <td>${escHtml(o.user_id)}</td>
+            <td class="an-amount">${fmtINR(o.total_amount)}</td>
+            <td>${escHtml(o.delivery_slot)}</td>
+            <td>${statusBadge(o.status)}</td>
+            <td style="font-size:0.77rem; color:var(--text-muted);">${escHtml(o.timestamp)}</td>
+        </tr>`;
+    }
+
+    function renderTable() {
+      const q = currentSearch.toLowerCase().trim();
+
+      const visible = allOrders.filter(function (o) {
+        /* 1. Status filter */
+        if (currentFilter !== "all" && o.status !== currentFilter) return false;
+        /* 2. Search filter (order_id, user_id, slot) */
+        if (q) {
+          const haystack = [o.order_id, o.user_id, o.delivery_slot, o.status]
+            .join(" ")
+            .toLowerCase();
+          if (!haystack.includes(q)) return false;
+        }
+        return true;
+      });
+
+      if (tblShown)
+        tblShown.textContent =
+          visible.length + " order" + (visible.length !== 1 ? "s" : "");
+
+      if (visible.length === 0) {
+        tblBody.innerHTML = `<tr><td colspan="6">
+                <div class="an-tbl-state">
+                    <div class="an-state-icon">🔍</div>
+                    <p class="an-state-title">No orders match your filter</p>
+                    <p>Try adjusting the status chips or search query.</p>
+                </div>
+            </td></tr>`;
+        return;
+      }
+
+      tblBody.innerHTML = visible.map(buildOrderRow).join("");
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       POPULATE KPI + PANELS FROM stats dict
+    ════════════════════════════════════════════════════════════ */
+
+    function populateStats(stats) {
+      const total = stats.total_orders || 0;
+      const slotSum =
+        (stats.slot_morning || 0) +
+        (stats.slot_afternoon || 0) +
+        (stats.slot_evening || 0);
+
+      /* ── Row A: Hero KPIs ── */
+      setHTML("kpi-revenue", fmtINR(stats.total_revenue || 0));
+      setText("kpi-revenue-sub", "across " + total + " orders");
+
+      setHTML("kpi-orders", total.toLocaleString());
+      const cancRate =
+        total > 0
+          ? (((stats.orders_cancelled || 0) / total) * 100).toFixed(1)
+          : "0.0";
+      setText("kpi-orders-sub", cancRate + "% cancellation rate");
+
+      setHTML("kpi-aov", fmtINR(stats.avg_order_value || 0));
+      setText("kpi-aov-sub", "per successful order");
+
+      setHTML("kpi-users", (stats.total_users || 0).toLocaleString());
+      const totalBoys =
+        (stats.active_delivery_boys || 0) + (stats.inactive_delivery_boys || 0);
+      setText("kpi-users-sub", totalBoys + " delivery partners");
+
+      /* ── Row B: Order Pipeline bars ── */
+      setBar(
+        "bar-delivered",
+        "bar-delivered-count",
+        stats.orders_delivered || 0,
+        total,
+      );
+      setBar("bar-ofd", "bar-ofd-count", stats.orders_out || 0, total);
+      setBar("bar-placed", "bar-placed-count", stats.orders_placed || 0, total);
+      setBar(
+        "bar-cancelled",
+        "bar-cancelled-count",
+        stats.orders_cancelled || 0,
+        total,
+      );
+
+      setBar(
+        "bar-morning",
+        "bar-morning-count",
+        stats.slot_morning || 0,
+        slotSum,
+      );
+      setBar(
+        "bar-afternoon",
+        "bar-afternoon-count",
+        stats.slot_afternoon || 0,
+        slotSum,
+      );
+      setBar(
+        "bar-evening",
+        "bar-evening-count",
+        stats.slot_evening || 0,
+        slotSum,
+      );
+
+      /* ── Row C: Inventory ── */
+      setHTML("inv-stock-kg", (stats.total_stock_kg || 0).toFixed(2) + " kg");
+
+      const lowCount = stats.low_stock_items || 0;
+      setHTML("inv-low-stock", lowCount);
+
+      const invPanel = document.getElementById("inv-panel");
+      const invAlertLbl = document.getElementById("inv-alert-label");
+      const invLowBadge = document.getElementById("inv-low-badge");
+
+      if (lowCount > 0) {
+        if (invPanel) invPanel.classList.add("low-stock-alert");
+        if (invAlertLbl) invAlertLbl.style.display = "inline-flex";
+        if (invLowBadge)
+          invLowBadge.innerHTML = `<span class="inv-alert-badge"><i class="bi bi-exclamation-triangle-fill"></i> ${lowCount} items below 5 kg</span>`;
+      } else {
+        if (invPanel) invPanel.classList.remove("low-stock-alert");
+        if (invAlertLbl) invAlertLbl.style.display = "none";
+        if (invLowBadge)
+          invLowBadge.innerHTML = `<span class="inv-ok-badge"><i class="bi bi-check-circle-fill"></i> All stocked</span>`;
+      }
+
+      /* Cancellation loss (computed from orders data) — show in third cell */
+      /* Note: C doesn't emit this directly; we surface AOV × cancelled as proxy */
+      const cancelLoss =
+        (stats.orders_cancelled || 0) * (stats.avg_order_value || 0);
+      setHTML("inv-cancel-loss", fmtINR(cancelLoss));
+
+      /* ── Row D: Fleet ── */
+      const active = stats.active_delivery_boys || 0;
+      const inactive = stats.inactive_delivery_boys || 0;
+      const total_b = active + inactive;
+
+      setHTML("fleet-total", total_b);
+      setHTML("fleet-active", active);
+      setHTML("fleet-inactive", inactive);
+      setText("fleet-pending", stats.orders_placed || 0);
+      setText("fleet-avail", active);
+
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       MAIN LOAD FUNCTION — called on DOMContentLoaded + Refresh btn
+    ════════════════════════════════════════════════════════════ */
+
+    async function loadAnalytics() {
+      /* Show spinner on refresh button */
+      if (refreshBtn) refreshBtn.classList.add("spinning");
+
+      /* Hide previous error */
+      if (errBanner) errBanner.style.display = "none";
+
+      /* Reset table to loading state */
+      if (tblBody) {
+        tblBody.innerHTML = `<tr><td colspan="6">
+                <div class="an-tbl-state">
+                    <div class="spinner-border spinner-border-sm text-primary me-2" style="opacity:0.5;"></div>
+                    <span style="font-size:0.88rem;">Loading analytics data…</span>
+                </div>
+            </td></tr>`;
+      }
+
+      try {
+        const res = await fetch("/api/analytics", {
+          method: "GET",
+          credentials: "same-origin",
+        });
+        const data = await res.json();
+
+        if (data.status !== "SUCCESS") {
+          throw new Error(data.message || "API returned an error.");
+        }
+
+        const stats = data.stats || {};
+
+        /* ① Populate all KPI + panel elements */
+        populateStats(stats);
+
+        /* ② For the recent orders table, fetch the orders list separately
+                  from the existing /api/admin/get_admin_orders endpoint.
+                  The analytics binary only emits aggregate metrics (no rows),
+                  so we reuse the existing orders API for the table. */
+        await loadRecentOrders();
+      } catch (err) {
+        console.error("loadAnalytics error:", err);
+
+        /* Show error banner */
+        if (errBanner) errBanner.style.display = "block";
+        if (errMsg)
+          errMsg.textContent = err.message || "Could not load analytics.";
+
+        /* Show error in table too */
+        if (tblBody) {
+          tblBody.innerHTML = `<tr><td colspan="6">
+                    <div class="an-tbl-state">
+                        <div class="an-state-icon" style="color:var(--danger);">
+                            <i class="bi bi-exclamation-triangle"></i>
+                        </div>
+                        <p class="an-state-title" style="color:var(--danger);">Data Load Failed</p>
+                        <p>${escHtml(err.message || "Could not reach the analytics API.")}</p>
+                    </div>
+                </td></tr>`;
+        }
+      } finally {
+        if (refreshBtn) refreshBtn.classList.remove("spinning");
+      }
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       RECENT ORDERS LOADER (reuses existing admin orders endpoint)
+    ════════════════════════════════════════════════════════════ */
+
+    async function loadRecentOrders() {
+      try {
+        const res = await fetch("/api/get_admin_orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        const data = await res.json();
+
+        if (data.status !== "SUCCESS")
+          throw new Error(data.message || "Orders API error");
+
+        allOrders = data.orders || [];
+        renderTable();
+      } catch (err) {
+        console.error("loadRecentOrders error:", err);
+        allOrders = [];
+        if (tblBody) {
+          tblBody.innerHTML = `<tr><td colspan="6">
+                    <div class="an-tbl-state">
+                        <div class="an-state-icon" style="color:var(--danger);">
+                            <i class="bi bi-wifi-off"></i>
+                        </div>
+                        <p class="an-state-title" style="color:var(--danger);">Orders Table Unavailable</p>
+                        <p>${escHtml(err.message)}</p>
+                    </div>
+                </td></tr>`;
+        }
+      }
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       EVENT LISTENERS — filter chips + search
+    ════════════════════════════════════════════════════════════ */
+
+    /* Status chip filter */
+    document.querySelectorAll(".an-status-chip").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document
+          .querySelectorAll(".an-status-chip")
+          .forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentFilter = btn.dataset.filter || "all";
+        renderTable();
+      });
+    });
+
+    /* Search (debounced 250ms) */
+    let searchTimer = null;
+    if (searchInput) {
+      searchInput.addEventListener("input", function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function () {
+          currentSearch = searchInput.value;
+          renderTable();
+        }, 250);
+      });
+    }
+
+    /* Refresh */
+    refreshBtn.addEventListener("click", loadAnalytics);
+
+    /* ════════════════════════════════════════════════════════════
+       BOOT
+    ════════════════════════════════════════════════════════════ */
+    document.addEventListener("DOMContentLoaded", loadAnalytics);
+
+  })();
+</script>
+{% endblock %}
