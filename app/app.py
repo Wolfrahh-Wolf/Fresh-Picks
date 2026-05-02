@@ -379,6 +379,16 @@ def admin_users():
         admin_name = session.get("admin_name", "Admin"),
     )
 
+@app.route("/admin_dash")
+def admin_dashboard():
+    guard = _require_login(role="admin")
+    if guard:
+        return guard
+
+    return render_template(
+        "admin_dash.html",
+        admin_name=session.get("admin_name", "Admin")
+    )
 
 @app.route("/admin_orders")
 def admin_orders():
