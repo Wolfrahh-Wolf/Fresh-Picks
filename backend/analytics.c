@@ -40,9 +40,7 @@
 #include "models.h"
 
 
-/* ══════════════════════════════════════════════════════════════════════
- * HELPER STRUCTS — mirrors the three logical domains of the dashboard
- * ══════════════════════════════════════════════════════════════════════ */
+/* HELPER STRUCTS — mirrors the three logical domains of the dashboard */
 
 typedef struct {
     float total_revenue;
@@ -68,16 +66,17 @@ typedef struct {
 } StaffMetrics;
 
 
-/* ══════════════════════════════════════════════════════════════════════
- * FUNCTION: calc_order_metrics
+/* FUNCTION: calc_order_metrics
  * PURPOSE:  Walk the order table once, accumulate revenue and
  *           categorise each order by status and delivery slot.
  * PARAMS:   order_table      — O(1) pointer table built in main()
  *           order_table_size — size of the pointer table
  *           out              — caller-allocated OrderMetrics to fill
- * ══════════════════════════════════════════════════════════════════════ */
-static void calc_order_metrics(OrderNode **order_table, int order_table_size,
-                                OrderMetrics *out) {
+ */
+static void calc_order_metrics(
+    OrderNode **order_table,
+    int order_table_size,
+    OrderMetrics *out) {
     memset(out, 0, sizeof(OrderMetrics));
 
     for (int i = 0; i < order_table_size; i++) {
@@ -85,32 +84,33 @@ static void calc_order_metrics(OrderNode **order_table, int order_table_size,
 
         Order *o = &order_table[i]->data;
         out->total_revenue += o->total_amount;
-        out->total_orders  += 1;
+        out->total_orders += 1;
 
-        /* ── Status categorisation ── */
-        if      (strcmp(o->status, "Order Placed")     == 0) out->orders_placed    += 1;
-        else if (strcmp(o->status, "Out for Delivery") == 0) out->orders_out       += 1;
+        /* Status categorisation */
+        if      (strcmp(o->status, "Order Placed")     == 0) out->orders_placed += 1;
+        else if (strcmp(o->status, "Out for Delivery") == 0) out->orders_out += 1;
         else if (strcmp(o->status, "Delivered")        == 0) out->orders_delivered += 1;
         else if (strcmp(o->status, "Cancelled")        == 0) out->orders_cancelled += 1;
 
-        /* ── Delivery slot categorisation ── */
-        if      (strcmp(o->delivery_slot, "Morning")   == 0) out->slot_morning   += 1;
+        /* Delivery slot categorisation*/
+        if      (strcmp(o->delivery_slot, "Morning")   == 0) out->slot_morning += 1;
         else if (strcmp(o->delivery_slot, "Afternoon") == 0) out->slot_afternoon += 1;
-        else if (strcmp(o->delivery_slot, "Evening")   == 0) out->slot_evening   += 1;
+        else if (strcmp(o->delivery_slot, "Evening")   == 0) out->slot_evening += 1;
     }
 }
 
 
-/* ══════════════════════════════════════════════════════════════════════
- * FUNCTION: calc_inventory_metrics
+/* FUNCTION: calc_inventory_metrics
  * PURPOSE:  Walk the veg table once, sum stock in kg and count
  *           items below the low-stock threshold (5000 g).
  * PARAMS:   veg_table      — O(1) pointer table built in main()
  *           veg_table_size — size of the pointer table
  *           out            — caller-allocated InventoryMetrics to fill
- * ══════════════════════════════════════════════════════════════════════ */
-static void calc_inventory_metrics(VegNode **veg_table, int veg_table_size,
-                                    InventoryMetrics *out) {
+ */
+static void calc_inventory_metrics(
+    VegNode **veg_table, 
+    int veg_table_size,
+    InventoryMetrics *out) {
     memset(out, 0, sizeof(InventoryMetrics));
 
     for (int i = 0; i < veg_table_size; i++) {
@@ -123,18 +123,18 @@ static void calc_inventory_metrics(VegNode **veg_table, int veg_table_size,
 }
 
 
-/* ══════════════════════════════════════════════════════════════════════
- * FUNCTION: calc_staff_metrics
+/* FUNCTION: calc_staff_metrics
  * PURPOSE:  Count total users (linear SLL walk — no table needed) and
  *           categorise delivery boys by is_active via the pointer table.
  * PARAMS:   user_head      — user SLL head
  *           boy_table      — O(1) pointer table built in main()
  *           boy_table_size — size of the pointer table
  *           out            — caller-allocated StaffMetrics to fill
- * ══════════════════════════════════════════════════════════════════════ */
-static void calc_staff_metrics(UserNode *user_head,
-                                DeliveryBoyNode **boy_table, int boy_table_size,
-                                StaffMetrics *out) {
+ */
+static void calc_staff_metrics(
+    UserNode *user_head,
+    DeliveryBoyNode **boy_table, int boy_table_size,
+    StaffMetrics *out) {
     memset(out, 0, sizeof(StaffMetrics));
 
     /* Count users via SLL — simple linear walk, no table overhead */
@@ -147,25 +147,27 @@ static void calc_staff_metrics(UserNode *user_head,
     /* Categorise delivery boys via O(1) table */
     for (int i = 0; i < boy_table_size; i++) {
         if (!boy_table[i]) continue;
-        if (boy_table[i]->data.is_active == 1) out->active_delivery_boys   += 1;
+        if (boy_table[i]->data.is_active == 1) out->active_delivery_boys += 1;
         else                                    out->inactive_delivery_boys += 1;
     }
 }
 
 
-/* ══════════════════════════════════════════════════════════════════════
- * FUNCTION: cmd_get_analytics
+/* FUNCTION: cmd_get_analytics
  * PURPOSE:  Receive all pre-built tables from main(), delegate to the
  *           three calc_* helpers, then emit SUCCESS + key|value lines.
  * PARAMS:   All pointer tables and their sizes, plus user SLL head for
  *           the linear user count.
  * OUTPUT:   SUCCESS\nkey|value\n...
  * SCHEMA:   See file-level comment for the full ordered key list.
- * ══════════════════════════════════════════════════════════════════════ */
-static void cmd_get_analytics(OrderNode **order_table, int order_table_size,
-                               VegNode   **veg_table,   int veg_table_size,
-                               UserNode   *user_head,
-                               DeliveryBoyNode **boy_table, int boy_table_size) {
+ */
+static void cmd_get_analytics(
+    OrderNode **order_table,
+    int order_table_size,
+    VegNode   **veg_table,
+    int veg_table_size,
+    UserNode   *user_head,
+    DeliveryBoyNode **boy_table, int boy_table_size) {
     OrderMetrics     om;
     InventoryMetrics im;
     StaffMetrics     sm;
@@ -179,55 +181,53 @@ static void cmd_get_analytics(OrderNode **order_table, int order_table_size,
                 ? (om.total_revenue / (float)om.total_orders)
                 : 0.0f;
 
-    /* ── Emit output — SUCCESS header first, then key|value pairs ── */
+    /* Emit output — SUCCESS header first, then key|value pairs */
     printf("SUCCESS\n");
 
     /* Revenue & order counts */
-    printf("total_revenue|%.2f\n",        om.total_revenue);
-    printf("total_orders|%d\n",           om.total_orders);
-    printf("avg_order_value|%.2f\n",      avg);
+    printf("total_revenue|%.2f\n",om.total_revenue);
+    printf("total_orders|%d\n",om.total_orders);
+    printf("avg_order_value|%.2f\n",avg);
 
     /* Order status breakdown */
-    printf("orders_placed|%d\n",          om.orders_placed);
-    printf("orders_out|%d\n",             om.orders_out);
-    printf("orders_delivered|%d\n",       om.orders_delivered);
-    printf("orders_cancelled|%d\n",       om.orders_cancelled);
+    printf("orders_placed|%d\n",om.orders_placed);
+    printf("orders_out|%d\n",om.orders_out);
+    printf("orders_delivered|%d\n",om.orders_delivered);
+    printf("orders_cancelled|%d\n",om.orders_cancelled);
 
     /* Delivery slot breakdown */
-    printf("slot_morning|%d\n",           om.slot_morning);
-    printf("slot_afternoon|%d\n",         om.slot_afternoon);
-    printf("slot_evening|%d\n",           om.slot_evening);
+    printf("slot_morning|%d\n",om.slot_morning);
+    printf("slot_afternoon|%d\n",om.slot_afternoon);
+    printf("slot_evening|%d\n",om.slot_evening);
 
     /* Inventory summary */
-    printf("total_stock_kg|%.2f\n",       im.total_stock_kg);
-    printf("low_stock_items|%d\n",        im.low_stock_items);
+    printf("total_stock_kg|%.2f\n",im.total_stock_kg);
+    printf("low_stock_items|%d\n",im.low_stock_items);
 
     /* User & staffing summary */
-    printf("total_users|%d\n",            sm.total_users);
-    printf("active_delivery_boys|%d\n",   sm.active_delivery_boys);
-    printf("inactive_delivery_boys|%d\n", sm.inactive_delivery_boys);
+    printf("total_users|%d\n",sm.total_users);
+    printf("active_delivery_boys|%d\n",sm.active_delivery_boys);
+    printf("inactive_delivery_boys|%d\n",sm.inactive_delivery_boys);
 }
 
 
-/* ══════════════════════════════════════════════════════════════════════
- * MAIN — Load SLLs, build tables once, dispatch, free everything
+/* MAIN — Load SLLs, build tables once, dispatch, free everything
  * PURPOSE:  Parse argv[1] and route to the appropriate cmd_* function.
  *           All SLL loading and table building happens here only.
- *           Guard clause on argc before any dispatch.
- * ══════════════════════════════════════════════════════════════════════ */
+ *           Guard clause on argc before any dispatch.*/
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         PRINT_ERROR("No command. Usage: ./analytics <command>");
         return 1;
     }
 
-    /* ── Load all SLLs (source of truth) ── */
+    /* Load all SLLs (source of truth)*/
     OrderNode       *order_head = load_order_sll();
     VegNode         *veg_head   = load_veg_sll();
     UserNode        *user_head  = load_user_sll();
     DeliveryBoyNode *boy_head   = load_delivery_boy_sll();
 
-    /* ── Build pointer tables for O(1) access ── */
+    /*Build pointer tables for O(1) access*/
     int order_table_size = 0;
     int veg_table_size   = 0;
     int boy_table_size   = DELIVERY_TABLE_SIZE;
@@ -236,8 +236,8 @@ int main(int argc, char *argv[]) {
     VegNode         **veg_table   = build_veg_table(veg_head,     &veg_table_size);
 
     /* Delivery-boy table — manually indexed using DELIVERY_TABLE_SIZE */
-    DeliveryBoyNode **boy_table   = (DeliveryBoyNode **)calloc(
-                                        boy_table_size, sizeof(DeliveryBoyNode *));
+    DeliveryBoyNode **boy_table   = 
+    (DeliveryBoyNode **)calloc(boy_table_size, sizeof(DeliveryBoyNode *));
     if (boy_table) {
         DeliveryBoyNode *bcurr = boy_head;
         while (bcurr != NULL) {
@@ -270,7 +270,7 @@ int main(int argc, char *argv[]) {
     }
 
 cleanup:
-    /* ── Free tables first, then SLLs — strict memory safety ── */
+    /*Free tables first, then SLLs — strict memory safety*/
     free(order_table);
     free(veg_table);
     free(boy_table);
