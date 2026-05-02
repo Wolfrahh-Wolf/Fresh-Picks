@@ -1,20 +1,5 @@
 {% extends "base.html" %}
 
-{#
-  admin_orders.html — Fresh Picks: Admin Order Management (Session 6 Refactor)
-  =============================================================================
-  Changes from Session 5:
-    ✔ JIT Banner removed entirely
-    ✔ Flex card layout (horizontal 2-row, no inline item pills)
-    ✔ "View Items" button → Modal with invoice table (PRODUCT|RATE|QTY|AMOUNT)
-    ✔ Cancel button: visible only on "Order Placed"; SweetAlert2 → OTP → cancel
-    ✔ Delivered fade-out: exactly 1 second
-    ✔ PDF via centralized receipt.js (no DOM clone; strict inline hex)
-    ✔ All JS template literals wrapped in {% raw %} ... {% endraw %}
-
-  Team: CodeCrafters | SDP-1
-#}
-
 {% block title %}Admin — Orders | Fresh Picks{% endblock %}
 
 {% block content %}
@@ -258,7 +243,7 @@
 
 <script>
 /* ════════════════════════════════════════════════════════════════════════
-   ADMIN ORDERS CONTROLLER — Session 6 Refactor
+   ADMIN ORDERS CONTROLLER
    ════════════════════════════════════════════════════════════════════════ */
 
 /* ─── Live Clock ──────────────────────────────────────────────────────── */

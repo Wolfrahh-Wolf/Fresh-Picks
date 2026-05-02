@@ -1,18 +1,4 @@
-{% extends "base.html" %}
-{#
-  user_orders.html — Fresh Picks: My Orders (Session 6 Refactor)
-  ==============================================================
-  Changes from Session 5:
-    ✔ Horizontal flex cards (not inline pills for items)
-    ✔ "View Items" button → Modal with invoice table (PRODUCT|RATE|QTY|AMOUNT)
-    ✔ Cancel button: visible only when status == "Order Placed"
-      → SweetAlert2-style warning → OTP modal → /api/cancel_order
-    ✔ Actual Delivery Agent Name + Phone shown (from boy_name / boy_phone)
-    ✔ Vertical timeline: "Delivered" step shows ✔ checkmark inside glowing circle
-    ✔ All JS template literals in {% raw %} ... {% endraw %}
-
-  Team: CodeCrafters | SDP-1
-#}
+{% extends "base.html" %} 
 
 {% block title %}My Orders | Fresh Picks{% endblock %}
 

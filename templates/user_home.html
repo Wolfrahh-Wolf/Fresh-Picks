@@ -1,17 +1,4 @@
 {% extends "base.html" %}
-<!--
-  user_home.html - Fresh Picks: User Home/Dashboard (v2)
-  =======================================================
-  Displayed after a successful user login.
-
-  CHANGELOG (v2):
-    - REMOVED: Old "Notice Board" card (was already commented out)
-    - UPDATED: Account Summary card now shows Full Name + Email
-    - ADDED:   "Go to Security Settings" button linking to /security
-    - ADDED:   Red (#F44747) accent on the security action card
-
-  Team: CodeCrafters | SDP-1
--->
 
 {% block title %}My Dashboard{% endblock %}
 
@@ -35,18 +22,7 @@
     </div>
 
     <!-- ── Navigation Cards ── -->
-    <div class="row g-3 mb-4">
-
-        <!-- Shop Card -->
-        <!-- <div class="col-sm-6 col-lg-4">
-            <div class="card portal-card h-100">
-                <div class="card-body">
-                <h5 class="card-title">Start Shopping</h5>
-                <p class="card-text">Browse our latest collection of fresh, farm-picked vegetables.</p>
-                <a href="/shop" class="btn btn-primary">  <i class="bi bi-basket me-2"></i>Go to Shop
-                </a>
-            </div>
-        </div> -->
+    <div class="row g-3 mb-4"> 
 
         <div class="col-sm-6 col-lg-4">
             <div class="card portal-card h-100">
@@ -178,7 +154,7 @@
             </div>
         </div>
 
-        <!-- Quick Actions Card (v2 addition) -->
+        <!-- Quick Actions Card -->
         <div class="col-lg-6">
             <div class="card h-100">
                 <div class="card-header">
@@ -187,9 +163,7 @@
                 <div class="card-body d-flex flex-column gap-3">
 
                     <!--
-                        SECURITY SETTINGS BUTTON (v2 addition)
-                        Password changes are now handled exclusively at /security.
-                        Red accent is used to signal that this is a security-critical action.
+                        SECURITY SETTINGS BUTTON 
                     -->
                     <div class="card"
                          style="border: 1px solid var(--danger) !important;
@@ -217,13 +191,30 @@
                         </div>
                     </div>
 
-                    <!-- Sprint Progress Notice -->
-                    <!-- <div class="alert alert-info mb-0">
-                        <i class="bi bi-info-circle me-1"></i>
-                        <strong>Sprint 1 Complete:</strong> Auth &amp; Security modules are live.
-                        Products, Cart, and Orders are coming in Sprint 2!
-                    </div> -->
-
+                    <!--
+                        LOGOUT BUTTON 
+                    -->
+                    <div class="card" style="border: 1px solid var(--border-color) !important;">
+                        <div class="card-body py-3">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                <div>
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <i class="bi bi-box-arrow-right"
+                                           style="color:var(--text-muted); font-size:1.2rem;"></i>
+                                        <strong class="text-bright">Sign Out</strong>
+                                    </div>
+                                    <p class="text-muted mb-0" style="font-size:0.82rem;">
+                                        End your current admin session.
+                                    </p>
+                                </div>
+                                <a href="/logout" class="btn btn-secondary btn-sm"
+                                   style="min-width:130px; text-align:center;">
+                                    <i class="bi bi-box-arrow-right me-1"></i>Logout
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    
                 </div>
             </div>
         </div>

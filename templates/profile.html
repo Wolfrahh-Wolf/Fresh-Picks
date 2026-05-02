@@ -1,19 +1,4 @@
-{% extends "base.html" %}
-<!--
-  profile.html - Fresh Picks: User Profile Page
-  ===============================================
-  Displays the logged-in user's profile data (fetched from users.txt
-  via the C backend) and provides a Change Password form.
-
-  On page load:
-    1. JavaScript sends POST to /api/get_profile
-    2. Flask calls C binary: ./auth get_profile <user_id>
-    3. C reads users.txt and prints: SUCCESS|id|username|full_name|phone|address
-    4. Flask parses and returns JSON
-    5. JS populates the profile fields on the page
-
-  Team: CodeCrafters | SDP-1
--->
+{% extends "base.html" %} 
 
 {% block title %}My Profile{% endblock %}
 

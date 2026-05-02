@@ -1,21 +1,4 @@
-{% extends "base.html" %}
-<!--
-  login.html - Fresh Picks: Shared Login Page
-  =============================================
-  Used by both Admins and Users. The `role` URL parameter
-  (passed by Flask as a template variable) controls:
-    - The page title/heading
-    - Which API endpoint is called (/api/login with role in body)
-
-  Flow:
-    1. User fills form and clicks Login
-    2. JS fetch() sends POST to /api/login with {username, password, role}
-    3. Flask calls C binary (login_admin or login_user)
-    4. On SUCCESS: store user_id/role in localStorage, redirect to dashboard
-    5. On ERROR: show error message on the page
-
-  Team: CodeCrafters | SDP-1
--->
+{% extends "base.html" %} 
 
 {% block title %}Login{% endblock %}
 

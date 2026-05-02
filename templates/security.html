@@ -1,35 +1,4 @@
-{% extends "base.html" %}
-<!--
-  security.html - Fresh Picks: Security Center (Module 5)
-  =========================================================
-  The unified password change page for BOTH users and admins.
-  Accessible at /security after any successful login.
-
-  THREE-STEP FLOW:
-    Step 1 — Enter Old Password:
-      User types current password and clicks "Verify"
-      → POST to /api/change_password with a placeholder new password
-        just to check the old one... Actually, we validate old password
-        on the FINAL step when all three inputs are filled.
-        The three-step is purely a UX guide, not separate API calls.
-
-    Step 2 — Choose New Password:
-      Reveals new + confirm password fields with the strength meter.
-
-    Step 3 — OTP Verification:
-      A Bootstrap modal appears with mock OTP "0000".
-      User types it in and clicks "Verify".
-      → If OTP is correct: POST to /api/change_password
-      → On SUCCESS: show success message.
-
-  DESIGN NOTES:
-    - Red (#F44747) accent throughout — security is a critical area
-    - Role-aware: shows "User Security" or "Admin Security" based on session
-    - All three steps are in one card, revealed progressively
-    - The actual API call happens AFTER OTP is verified
-
-  Team: CodeCrafters | SDP-1
--->
+{% extends "base.html" %} 
 
 {% block title %}Security Center{% endblock %}
 

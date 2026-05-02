@@ -1,27 +1,3 @@
-{# ==============================================================
-   admin_inventory.html — Fresh Picks: Admin Inventory Manager
-   ==============================================================
-   Child template — inherits from base.html.
-
-   FLASK CONTEXT EXPECTED:
-     - vegetables  : list of dicts (veg_id, name, category, stock_g,
-                     price_per_1000g, validity_days)
-     - free_items  : list of dicts (vf_id, name, stock_g,
-                     min_trigger_amt, free_qty_g)
-     - admin_name  : logged-in admin's display name (from session)
-
-   API ENDPOINTS (consumed by JS):
-     - POST /api/update_stock       (vegetables)
-     - POST /api/update_promo_stock (free_items)
-
-   HARDCODED ROUTES:
-     - /admin_dash   — Dashboard
-     - /admin_orders — All Orders
-     - /logout       — Logout
-
-   Team: CodeCrafters | Project: Fresh Picks | SDP-1
-   ============================================================== #}
-
 {% extends "base.html" %}
 
 

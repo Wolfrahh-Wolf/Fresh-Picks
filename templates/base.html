@@ -1,40 +1,5 @@
 <!DOCTYPE html>
 
-<!--
-  base.html — Fresh Picks: Master Layout Template
-  ================================================
-  FIXES APPLIED (CodeCrafters Bug-Fix Round):
-
-  [Task C] CSS 404 — FIXED
-    BEFORE: <link rel="stylesheet" href="/static/css/dark-theme.css">
-    AFTER:  <link rel="stylesheet" href="{{ url_for('static', filename='css/dark-theme.css') }}">
-    WHY: A hardcoded /static/ path breaks if Flask's static_folder is mounted
-         at a non-default location (as it is here: static_folder="../static").
-         url_for('static', ...) always resolves the correct path regardless of
-         where Flask is mounted, and it also benefits from cache-busting in
-         production (url_for appends ?v=... when SEND_FILE_MAX_AGE is set).
-
-  [Task D] Navbar Clutter — FIXED
-    BEFORE: Right-side links were in one <ul> with no IDs; the JS block at the
-            bottom referenced getElementById("nav-login-btn") etc. which returned
-            null, causing a TypeError crash on every page load.
-    AFTER:  Every navbar link that needs show/hide logic has a matching id="..."
-            attribute. Links are split into two clearly-labelled groups:
-              • #nav-guest-links  — shown when NOT logged in (Login x2)
-              • #nav-auth-links   — shown when logged in   (Profile, Orders, Logout)
-            Duplicate "Home" link removed; "My Orders" now points to /cart
-            (the only orders PAGE route in app.py; /user_orders has no page route).
-
-  [Task A] Endpoint cross-check
-    All href values in this file use raw URL strings (no url_for calls) — that
-    is intentional because base.html has no Jinja block that changes per-page.
-    The one url_for call that WAS here (static CSS) is fixed above. All other
-    hrefs (/login/admin, /login/user, /admin_orders, /cart, /logout) match the
-    @app.route() strings in app.py exactly.
-
-  Team: CodeCrafters | Project: Fresh Picks | SDP-1
--->
-
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -51,56 +16,15 @@
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
-    <!--
-      [TASK C FIX] — CSS 404
-      BEFORE: href="/static/css/dark-theme.css"  (hardcoded path, breaks with custom static_folder)
-      AFTER:  href="{{ url_for('static', filename='css/dark-theme.css') }}"
-      url_for() respects Flask's static_folder config (here: "../static") and
-      generates the correct URL no matter where the app is mounted.
-    -->
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='css/dark-theme.css') }}">
+    <link rel="stylesheet" href="/static/css/dark-theme.css">
 
-    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 
     <!-- Extra <style> or <link> a child page needs -->
     {% block extra_head %}{% endblock %}
 </head>
 
 <body>
-
-    <!-- ═══════════════════════════════════════════════
-         NAVBAR
-         ═══════════════════════════════════════════════
-
-         [TASK D FIX] — Navbar Clutter
-         The navbar is split into two logical groups:
-
-         LEFT SIDE  (.navbar-nav.me-auto)
-           • Home  — always visible
-
-         RIGHT SIDE (.navbar-nav.ms-auto)
-           Guest links  (#nav-guest-links)
-             • Admin Login
-             • User Login
-             These are visible when no one is logged in.
-             JS hides this entire <ul> once localStorage has a user_id.
-
-           Auth links  (#nav-auth-links)
-             • Profile     (id="nav-profile-btn" — only for role="user")
-             • Admin Panel (id="nav-admin-btn"   — only for role="admin")
-             • My Orders   (id="nav-orders-btn"  — for user role)
-             • All Orders  (id="nav-admin-orders-btn" — for admin role)
-             • Logout      (id="nav-logout-btn"  — always shown when logged in)
-             These are hidden by default via CSS (d-none); JS reveals them.
-
-         WHY SPLIT INTO TWO <ul> TAGS?
-           The old code had one flat <ul> for all right-side links. The JS block
-           tried to hide/show individual items by ID — but those IDs didn't exist
-           in the HTML, so every getElementById() call returned null and threw a
-           TypeError: Cannot read properties of null (reading 'classList').
-           By giving each <li> a unique id, JS can safely toggle d-none on them.
-    -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
         <div class="container">
             <a class="navbar-brand" href="/">
@@ -190,28 +114,7 @@
         /*
          * ═══════════════════════════════════════════════════════════
          * NAVBAR SESSION AWARENESS
-         * ═══════════════════════════════════════════════════════════
-         *
-         * [TASK D FIX] — The old version referenced IDs that didn't
-         * exist in the HTML, causing null-pointer TypeErrors.
-         *
-         * HOW IT WORKS:
-         *   1. On login  → Flask API returns { status:"SUCCESS", role, user_id }
-         *                  The login page JS stores these in localStorage.
-         *   2. On every page load (this IIFE runs immediately) → we read
-         *                  localStorage and show/hide the correct nav items.
-         *   3. On logout → /logout clears Flask session; the page redirects
-         *                  to /, and we also clear localStorage below.
-         *
-         * SHOW/HIDE STRATEGY:
-         *   • Guest state  (no user_id in localStorage):
-         *       - Show  #nav-guest-links  (Admin Login + User Login)
-         *       - Hide  all #nav-*-btn items
-         *   • Logged-in state (user_id present):
-         *       - Hide  #nav-guest-links
-         *       - Show  #nav-logout-btn  always
-         *       - Show  #nav-profile-btn + #nav-orders-btn  if role === "user"
-         *       - Show  #nav-admin-btn   + #nav-admin-orders-btn  if role === "admin"
+         * ═══════════════════════════════════════════════════════════ 
          */
         (function updateNavbar() {
             const userId = localStorage.getItem("user_id");
@@ -253,10 +156,6 @@
             });
         }
     </script>
-
-    <!-- Before receipt.js -->
-    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <script src="/static/js/receipt.js"></script> -->
 
     <!-- For shop/inventory pages -->
     <script src="/static/js/ui-helpers.js"></script>

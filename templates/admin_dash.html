@@ -1,22 +1,4 @@
 {% extends "base.html" %}
-{#
-  admin_dash.html — Fresh Picks: Admin Dashboard (Session 2 Update)
-  ==================================================================
-  WHAT: The four placeholder cards (Products, Orders, Users, Reports)
-        now navigate to their real pages. Products → /admin_inventory,
-        Orders → /admin_orders. Users and Reports remain placeholders.
-  WHY:  The dashboard is the launch pad. Clicking a card must take the
-        admin somewhere useful, not just look pretty.
-
-  CHANGES from v2:
-    - Products card → links to /admin_inventory (new in Session 2)
-    - Orders card   → links to /admin_orders    (new in Session 2)
-    - Cards are now <a> tags (entire card is clickable)
-    - Added "New" badge on Products and Orders cards
-    - Removed inline onclick; uses href for clean navigation
-
-  Team: CodeCrafters | SDP-1 | Session 2
-#}
 
 {% block title %}Admin Dashboard{% endblock %}
 
@@ -78,7 +60,7 @@
                     <div class="card text-center" style="border-left: 3px solid var(--accent) !important;">
                         <div class="card-body py-3">
                             <div style="font-size:1.8rem;">📦</div>
-                            <div class="text-bright fw-bold mt-1">Products</div>
+                            <div class="text-bright fw-bold mt-1">Inventory</div>
                             <div class="text-muted" style="font-size:0.78rem;">Manage Inventory</div>
                         </div>
                     </div>
@@ -190,55 +172,6 @@
                     <i class="bi bi-lightning-charge me-2"></i>Quick Actions
                 </div>
                 <div class="card-body d-flex flex-column gap-3">
-
-                    {# ── NEW: Inventory Shortcut ── #}
-                    <div class="card" style="border: 1px solid var(--accent) !important;
-                                             background: rgba(0,122,204,0.06) !important;">
-                        <div class="card-body py-3">
-                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                <div>
-                                    <div class="d-flex align-items-center gap-2 mb-1">
-                                        <i class="bi bi-box-seam-fill"
-                                           style="color:var(--accent); font-size:1.2rem;"></i>
-                                        <strong class="text-bright">Inventory Manager</strong>
-                                    </div>
-                                    <p class="text-muted mb-0" style="font-size:0.82rem;">
-                                        Update stock, prices, and validity dates.
-                                    </p>
-                                </div>
-                                <a href="/admin_inventory" class="btn btn-sm btn-primary"
-                                   style="min-width:130px; text-align:center;">
-                                    <i class="bi bi-arrow-right me-1"></i>Open Inventory
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-                    {# ── User Directory Shortcut ── #}
-        <div class="card" style="border: 1px solid var(--warning) !important;
-                         background: rgba(255,204,0,0.05) !important;">
-            <div class="card-body py-3">
-                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                    <div>
-                        <div class="d-flex align-items-center gap-2 mb-1">
-                            <i class="bi bi-people-fill"
-                            style="color:var(--warning); font-size:1.2rem;"></i>
-                            <strong class="text-bright">User Directory</strong>
-                        </div>
-                        <p class="text-muted mb-0" style="font-size:0.82rem;">
-                        Browse, search, and inspect customer accounts.
-                        </p>
-                    </div>
-                    <a href="/admin/users"
-                        class="btn btn-sm"
-                        style="background:var(--warning); color:#1E1E1E; border:none;
-                        min-width:150px; text-align:center;">
-                        <i class="bi bi-arrow-right me-1"></i>Open User Directory
-                    </a>
-                </div>
-            </div>
-        </div>
-                            
 
                     {#
                       SECURITY SETTINGS BUTTON (unchanged from v2)
