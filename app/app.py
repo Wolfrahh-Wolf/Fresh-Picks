@@ -210,6 +210,57 @@ def _parse_promo_line(line):
         "free_qty_g":      int(parts[4])
     }
 
+def _parse_analytics_output(raw_output):
+    """
+    PURPOSE: Parse the multi-line stdout from ./analytics get_analytics
+             into a typed Python dictionary.
+    PARAMS:  raw_output — full stdout string captured from run_c_binary().
+    RETURNS: dict with all metric keys cast to int or float, or None if
+             the first line is not "SUCCESS".
+
+    SCHEMA (key|value, one per line after SUCCESS):
+        total_revenue          float  — sum of all order totals
+        total_orders           int    — count of all orders
+        avg_order_value        float  — total_revenue / total_orders
+        orders_placed          int    — status == "Order Placed"
+        orders_out             int    — status == "Out for Delivery"
+        orders_delivered       int    — status == "Delivered"
+        orders_cancelled       int    — status == "Cancelled"
+        slot_morning           int    — delivery_slot == "Morning"
+        slot_afternoon         int    — delivery_slot == "Afternoon"
+        slot_evening           int    — delivery_slot == "Evening"
+        total_stock_kg         float  — sum of all veg stock_g / 1000
+        low_stock_items        int    — count of vegs with stock_g < 5000
+        total_users            int    — count of registered users
+        active_delivery_boys   int    — delivery boys with is_active == 1
+        inactive_delivery_boys int    — delivery boys with is_active == 0
+    """
+    _INT_KEYS = {
+        "total_orders", "orders_placed", "orders_out",
+        "orders_delivered", "orders_cancelled",
+        "slot_morning", "slot_afternoon", "slot_evening",
+        "low_stock_items", "total_users",
+        "active_delivery_boys", "inactive_delivery_boys",
+    }
+
+    lines = raw_output.strip().split("\n")
+
+    if not lines or lines[0].strip() != "SUCCESS":
+        return None
+
+    stats = {}
+    for line in lines[1:]:
+        line = line.strip()
+        if not line or "|" not in line:
+            continue
+        key, _, raw_val = line.partition("|")
+        key = key.strip()
+        if key in _INT_KEYS:
+            stats[key] = int(raw_val.strip())
+        else:
+            stats[key] = _safe_float(raw_val.strip())
+
+    return stats if stats else None
 # =============================================================
 # PAGE ROUTES — Serve HTML templates
 # =============================================================
@@ -350,7 +401,22 @@ def admin_orders():
         admin_name = session.get("admin_name", "Admin")
     )
 
+@app.route("/admin/analytics")
+def admin_analytics():
+    """
+    GET /admin/analytics  (admin only)
+    Thin shell route — renders the analytics dashboard HTML.
+    All data is fetched client-side via JS calling GET /api/analytics.
+    No C binary is invoked here per Rule Set 2 §1.
+    """
+    guard = _require_login(role="admin")
+    if guard:
+        return guard
 
+    return render_template(
+        "admin_analytics.html",
+        admin_name = session.get("admin_name", "Admin")
+    )
 @app.route("/product_images/<filename>")
 def serve_product_image(filename):
     # Image bridge: serves files from the /images/ root folder.
@@ -1409,6 +1475,36 @@ def api_admin_get_user():
 
     return jsonify({"status": "SUCCESS", "user": user})
 
+@app.route("/api/analytics", methods=["GET"])
+def api_analytics():
+    """
+    GET /api/analytics  (admin only)
+    Calls: ./analytics get_analytics
+    Returns JSON with all dashboard metrics.
+
+    Success: { "status": "SUCCESS", "stats": { ...all keys... } }
+    Error:   { "status": "ERROR",   "message": "..." }
+    """
+    if session.get("role") != "admin":
+        return jsonify({"status": "ERROR", "message": "Admin only"}), 403
+
+    result = run_c_binary("analytics", ["get_analytics"])
+
+    if result["status"] != "SUCCESS":
+        return jsonify({
+            "status":  "ERROR",
+            "message": result.get("data", "Analytics binary failed")
+        })
+
+    stats = _parse_analytics_output(result["raw_output"])
+
+    if stats is None:
+        return jsonify({
+            "status":  "ERROR",
+            "message": "Failed to parse analytics output"
+        })
+
+    return jsonify({"status": "SUCCESS", "stats": stats})
 # =============================================================
 # START THE SERVER — with SSL/HTTPS
 # =============================================================
