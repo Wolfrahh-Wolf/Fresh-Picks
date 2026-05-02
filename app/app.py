@@ -322,6 +322,22 @@ def admin_dash():
         admin_name = session.get("admin_name", "Admin")
     )
 
+@app.route("/admin_analytics")
+def admin_analytics():
+    """
+    GET /admin_analytics  (admin only)
+ 
+    Thin page route — renders the analytics shell template ONLY.
+    No calls to run_c_binary, no data processing, no Jinja loops.
+    All data is fetched client-side via JS → GET /api/analytics.
+ 
+    Session guard: redirects to admin login if role != "admin".
+    """
+    guard = _require_login(role="admin")
+    if guard:
+        return guard
+ 
+    return render_template("admin_analytics.html")
 
 @app.route("/profile")
 def profile():
