@@ -1,74 +1,67 @@
 #!/bin/bash
-# =============================================================
-# build.sh - Fresh Picks: C Backend Compilation Script (v3)
-# =============================================================
-# SPRINT 3 ADDITIONS:
-#   - Compiles receipt.c -> receipt binary (PDF data extractor)
-#
-# HOW TO RUN:
-#   Linux / macOS:   chmod +x build.sh && ./build.sh
-#   Windows (Bash):  bash build.sh
-#
-# Team: CodeCrafters | Project: Fresh Picks | SDP-1
-# =============================================================
+# Fresh Picks - C backend build script
+
+set -e
 
 echo "================================================"
 echo "  Fresh Picks - Building C Backend Binaries"
 echo "================================================"
 
-# Navigate to the backend directory
 cd "$(dirname "$0")"
 
-# ── 1. order binary ─────────────────────────────────────────────
-echo "[1/6] Compiling order..."
-gcc -Wall -Wextra -o order order.c utils.c -lm
-echo "      ✓ order compiled successfully"
+if command -v gcc >/dev/null 2>&1; then
+    CC="gcc"
+elif [ -x "/c/msys64/ucrt64/bin/gcc.exe" ]; then
+    export PATH="/c/msys64/ucrt64/bin:/c/msys64/usr/bin:$PATH"
+    CC="/c/msys64/ucrt64/bin/gcc.exe"
+elif [ -x "/mingw64/bin/gcc.exe" ]; then
+    export PATH="/mingw64/bin:/usr/bin:$PATH"
+    CC="/mingw64/bin/gcc.exe"
+else
+    echo "ERROR: gcc was not found."
+    echo "Install MSYS2 GCC, or add C:\\msys64\\ucrt64\\bin to PATH."
+    exit 1
+fi
 
-# ── 2. auth binary ──────────────────────────────────────────────
-echo "[2/6] Compiling auth..."
-gcc -Wall -Wextra -o auth auth.c utils.c -lm
-echo "      ✓ auth compiled successfully"
+echo "Using compiler: $CC"
+echo ""
 
-# ── 3. inventory binary ─────────────────────────────────────────
-echo "[3/6] Compiling inventory..."
-gcc -Wall -Wextra -o inventory inventory.c utils.c -lm
-echo "      ✓ inventory compiled successfully"
+echo "[1/7] Compiling order..."
+"$CC" -Wall -Wextra -o order order.c utils.c -lm
+echo "      order compiled successfully"
 
-# ── 4. delivery binary ──────────────────────────────────────────
-echo "[4/6] Compiling delivery..."
-gcc -Wall -Wextra -o delivery delivery.c utils.c -lm
-echo "      ✓ delivery compiled successfully"
+echo "[2/7] Compiling auth..."
+"$CC" -Wall -Wextra -o auth auth.c utils.c -lm
+echo "      auth compiled successfully"
 
-# ── 5. receipt binary ───────────────────────────────────────────
-echo "[5/6] Compiling receipt..."
-gcc -Wall -Wextra -o receipt receipt.c utils.c -lm
-echo "      ✓ receipt compiled successfully"
-# gcc -Wall -Wextra -o receipt receipt.c -lm
+echo "[3/7] Compiling inventory..."
+"$CC" -Wall -Wextra -o inventory inventory.c utils.c -lm
+echo "      inventory compiled successfully"
 
-# ── 6. users binary ───────────────────────────────────────────
-echo "[6/6] Compiling users..."
-gcc -Wall -Wextra -o users users.c utils.c -lm
-echo "      ✓ users compiled successfully"
-# gcc -Wall -Wextra -o users users.c -lm
+echo "[4/7] Compiling delivery..."
+"$CC" -Wall -Wextra -o delivery delivery.c utils.c -lm
+echo "      delivery compiled successfully"
 
-# ── 7. mailer binary ───────────────────────────────────────────
+echo "[5/7] Compiling receipt..."
+"$CC" -Wall -Wextra -o receipt receipt.c utils.c -lm
+echo "      receipt compiled successfully"
+
+echo "[6/7] Compiling users..."
+"$CC" -Wall -Wextra -o users users.c utils.c -lm
+echo "      users compiled successfully"
+
 echo "[7/7] Compiling mailer..."
-gcc -Wall -Wextra -o mailer mailer.c -lcurl
-echo "      ✓ mailer compiled successfully"
+"$CC" -Wall -Wextra -o mailer mailer.c
+echo "      mailer compiled successfully"
 
-# ── Create the carts/ directory if it doesn't exist ─────────────
 echo ""
 echo "[Setup] Creating carts/ directory..."
 mkdir -p carts
-echo "        ✓ carts/ directory ready"
+echo "        carts/ directory ready"
 
 echo ""
 echo "================================================"
-echo "  All binaries compiled! Ready to run Flask."
+echo "  All binaries compiled. Ready to run Flask."
 echo ""
-echo "  Next step: Run app.py"
-echo "  Git Bash:    cd ../app && python app.py"
-echo "  PowerShell:  cd ../app; python app.py"
-echo "  macOS/Linux: cd ../app && python3 app.py"
-echo ""
+echo "  PowerShell: cd ../app; python app.py"
 echo "================================================"
