@@ -30,13 +30,27 @@
 
 
 
-#include <io.h>
-#include <sys/locking.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include "models.h"
+#ifdef _WIN32
+    #include <io.h>
+    #include <sys/locking.h>
+
+    #define LOCK_FILE(fp)   _locking(_fileno(fp), _LK_LOCK, 1)
+    #define UNLOCK_FILE(fp) _locking(_fileno(fp), _LK_UNLCK, 1)
+
+#else
+    #include <unistd.h>
+    #include <fcntl.h>
+    #include <sys/file.h>
+
+    #define LOCK_FILE(fp)   flock(fileno(fp), LOCK_EX)
+    #define UNLOCK_FILE(fp) flock(fileno(fp), LOCK_UN)
+
+#endif
 
  /* ══════════════════════════════════════════════════════════════
    WINDOWS File Locking Macros
@@ -55,19 +69,19 @@
     do {                                                \
         (fp) = fopen((filepath), "rb");                 \
         if (!(fp)) return NULL;                         \
-        _locking(_fileno(fp), _LK_LOCK, 1);             \
+        LOCK_FILE(fp);                                  \
     } while (0)
 
 #define SLL_SAVE_OPEN(filepath, fp)                     \
     do {                                                \
         (fp) = fopen((filepath), "wb");                 \
         if (!(fp)) return;                              \
-        _locking(_fileno(fp), _LK_LOCK, 1);             \
+        LOCK_FILE(fp);                                  \
     } while (0)
 
 #define SLL_CLOSE(fp)                                   \
     do {                                                \
-        _locking(_fileno(fp), _LK_UNLCK, 1);            \
+        UNLOCK_FILE(fp);                                \
         fclose(fp);                                     \
     } while (0)
 

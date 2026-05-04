@@ -571,6 +571,10 @@
                          style="color:var(--danger); font-size:0.78rem; display:none;">
                         Incorrect OTP. Please try again.
                     </div>
+                    <div id="cartOtpStatus" class="mt-2"
+                         style="color:var(--text-muted); font-size:0.78rem;">
+                        We'll send the OTP to your registered email address.
+                    </div>
                 </div>
             </div>
             <div class="modal-footer"
@@ -578,6 +582,11 @@
                 <button class="btn btn-sm"
                         style="background:var(--bg-elevated); color:var(--text-muted);"
                         data-bs-dismiss="modal">Go Back</button>
+                <button class="btn btn-sm"
+                        style="background:var(--bg-elevated); color:var(--accent);"
+                        onclick="resendCartCancelOtp()">
+                    <i class="bi bi-arrow-repeat me-1"></i>Resend OTP
+                </button>
                 <button class="btn btn-sm"
                         style="background:var(--danger); color:#fff; border:none;"
                         onclick="cartConfirmCancelWithOtp()">
@@ -1058,6 +1067,7 @@ async function confirmPayment() {
                         checkoutResult = verifyData;
                         renderReceipt(verifyData);
                         goToState(5);
+                        _autoEmailReceipt();
                         resolve();
 
                     } catch (err) {
@@ -1254,38 +1264,112 @@ function renderReceipt(result) {
 ───────────────────────────────────────────────────────────────── */
 let _cartPendingCancelId = null;
 
-function cartInitiateCancel(orderId) {
+function setCartOtpState(message, type = "info") {
+    const statusEl = document.getElementById("cartOtpStatus");
+    const errorEl  = document.getElementById("cartOtpError");
+    if (errorEl) errorEl.style.display = "none";
+    if (!statusEl) return;
+
+    const colors = {
+        info: "var(--text-muted)",
+        success: "var(--success)",
+        warning: "var(--warning)",
+        danger: "var(--danger)"
+    };
+    statusEl.textContent = message;
+    statusEl.style.color = colors[type] || colors.info;
+}
+
+async function cartInitiateCancel(orderId) {
     _cartPendingCancelId = orderId;
     const otpInput = document.getElementById("cartOtpInput");
     const otpError = document.getElementById("cartOtpError");
     if (otpInput) otpInput.value = "";
     if (otpError) otpError.style.display = "none";
-    new bootstrap.Modal(document.getElementById("cartCancelModal")).show();
+    setCartOtpState("Sending OTP to your registered email...", "info");
+
+    try {
+        const res  = await fetch("/api/send_cancel_order_otp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ order_id: orderId })
+        });
+        const data = await res.json();
+        if (data.status !== "SUCCESS") {
+            _cartPendingCancelId = null;
+            showToast(data.message || "Could not send cancellation OTP.", "danger");
+            return;
+        }
+
+        setCartOtpState(`OTP sent to ${data.user_email}.`, "success");
+        new bootstrap.Modal(document.getElementById("cartCancelModal")).show();
+    } catch (err) {
+        _cartPendingCancelId = null;
+        showToast("Could not send cancellation OTP. Please try again.", "danger");
+    }
 }
 
 async function cartConfirmCancelWithOtp() {
     const otp     = document.getElementById("cartOtpInput")?.value.trim();
     const otpError = document.getElementById("cartOtpError");
-    if (otp !== "0000") { if (otpError) otpError.style.display = "block"; return; }
+    if (!otp) {
+        if (otpError) {
+            otpError.textContent = "Please enter the OTP.";
+            otpError.style.display = "block";
+        }
+        return;
+    }
     if (otpError) otpError.style.display = "none";
     const orderId = _cartPendingCancelId;
     if (!orderId) return;
-    bootstrap.Modal.getInstance(document.getElementById("cartCancelModal"))?.hide();
+
     try {
-        const res  = await fetch("/api/cancel_order", {
+        const res  = await fetch("/api/cancel_order_with_otp", {
             method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ order_id: orderId, otp })
+        });
+        const data = await res.json();
+        if (data.status === "SUCCESS") {
+            bootstrap.Modal.getInstance(document.getElementById("cartCancelModal"))?.hide();
+            showToast(`Order ${orderId} cancelled successfully.`, "success");
+            _cartPendingCancelId = null;
+        } else {
+            if (otpError) {
+                otpError.textContent = data.message || "OTP verification failed.";
+                otpError.style.display = "block";
+            }
+        }
+    } catch (err) {
+        if (otpError) {
+            otpError.textContent = "Network error. Please try again.";
+            otpError.style.display = "block";
+        }
+    }
+}
+
+async function resendCartCancelOtp() {
+    const orderId = _cartPendingCancelId;
+    if (!orderId) {
+        setCartOtpState("No pending order found for OTP resend.", "warning");
+        return;
+    }
+
+    setCartOtpState("Resending OTP...", "info");
+    try {
+        const res  = await fetch("/api/send_cancel_order_otp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ order_id: orderId })
         });
         const data = await res.json();
         if (data.status === "SUCCESS") {
-            showToast(`Order ${orderId} cancelled successfully.`, "success");
+            setCartOtpState(`OTP resent to ${data.user_email}.`, "success");
         } else {
-            showToast(`Cancel failed: ${data.message}`, "danger");
+            setCartOtpState(data.message || "Could not resend OTP.", "warning");
         }
     } catch (err) {
-        showToast("Network error. Please try again.", "danger");
+        setCartOtpState("Could not resend OTP right now.", "warning");
     }
-    _cartPendingCancelId = null;
 }
 
 /* ── Toast System ────────────────────────────────────────────── */
@@ -1319,13 +1403,67 @@ function downloadReceiptAsPDF() {
         showToast("No order found. Please complete checkout first.", "danger");
         return;
     }
-    /* Server-side PDF — just navigate to the Flask route.
-       The order is already committed to DB by the time we reach
-       State 5 (confirmPayment() calls /api/checkout first and only
-       calls renderReceipt + goToState(5) on SUCCESS). */
+
+    /* Server-side PDF download — unchanged behaviour for the user */
     window.location.href = `/api/download_receipt/${checkoutResult.order_id}`;
 }
+
 {% endraw %}
+
+/**
+ * requestReceiptEmail(orderId)
+ * ----------------------------
+ * Asks Flask to generate the same server-side receipt PDF used by
+ * /api/download_receipt and forward it to the C mailer binary.
+ */
+async function requestReceiptEmail(orderId) {
+    try {
+        const res  = await fetch("/api/email_receipt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ order_id: orderId })
+        });
+
+        const data = await res.json();
+        const sentTo = data.user_email || (_profile && _profile.email) || "your registered email";
+
+        if (data.status === "SUCCESS") {
+            showToast("📧 Receipt emailed to " + sentTo, "success", 5000);
+        } else {
+            /* Silent-ish failure — don't alarm the user, just log it */
+            console.warn("[requestReceiptEmail] Mailer error:", data.message);
+            showToast("Could not email receipt — you can still download it.", "warning", 5000);
+        }
+
+    } catch (err) {
+        /* Network-level error — same quiet treatment */
+        console.error("[requestReceiptEmail] Fetch error:", err);
+        showToast("Could not email receipt — you can still download it.", "warning", 5000);
+    }
+}
+
+/**
+ * _autoEmailReceipt()
+ * --------------------
+ * Called once after goToState(5). Triggers the backend to generate the
+ * receipt PDF and email it in the background.
+ *
+ * Guards:
+ *   • Skips silently if checkoutResult has no order_id (shouldn't happen).
+ */
+function _autoEmailReceipt() {
+    const orderId = checkoutResult && checkoutResult.order_id;
+
+    if (!orderId) {
+        console.warn("[_autoEmailReceipt] No order_id in checkoutResult, skipping.");
+        return;
+    }
+
+    /* Fire-and-forget async work — never await this at the call site */
+    (async () => {
+        await requestReceiptEmail(orderId);
+    })();
+}
 
 </script>
 {% endblock %}

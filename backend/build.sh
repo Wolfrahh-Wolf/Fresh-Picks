@@ -54,6 +54,11 @@ echo "[7/7] Compiling users..."
 gcc -Wall -Wextra -o analytics analytics.c utils.c -lm
 echo "      ✓ analytics compiled successfully"
 
+# ── 7. mailer binary ───────────────────────────────────────────
+echo "[7/7] Compiling mailer..."
+gcc -Wall -Wextra -o mailer mailer.c -lcurl
+echo "      ✓ mailer compiled successfully"
+
 # ── Create the carts/ directory if it doesn't exist ─────────────
 echo ""
 echo "[Setup] Creating carts/ directory..."

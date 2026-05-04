@@ -56,7 +56,7 @@
 </div>
 
 {# ════════════════════════════════════════════════════════════════
-   OTP CANCELLATION MODAL (user flow — same OTP: 0000 for demo)
+   OTP CANCELLATION MODAL
 ════════════════════════════════════════════════════════════════ #}
 <div class="modal fade" id="userOtpModal" tabindex="-1"
      aria-labelledby="userOtpModalLabel" aria-hidden="true">
@@ -98,6 +98,10 @@
                          style="color:var(--danger); font-size:0.78rem; display:none;">
                         Incorrect OTP. Please try again.
                     </div>
+                    <div id="userOtpStatus" class="mt-2"
+                         style="color:var(--text-muted); font-size:0.78rem;">
+                        We'll send the OTP to your registered email address.
+                    </div>
                 </div>
             </div>
             <div class="modal-footer"
@@ -105,6 +109,11 @@
                 <button class="btn btn-sm"
                         style="background:var(--bg-elevated); color:var(--text-muted);"
                         data-bs-dismiss="modal">Go Back</button>
+                <button class="btn btn-sm"
+                        style="background:var(--bg-elevated); color:var(--accent);"
+                        onclick="resendUserCancelOtp()">
+                    <i class="bi bi-arrow-repeat me-1"></i>Resend OTP
+                </button>
                 <button class="btn btn-sm"
                         style="background:var(--danger); color:#fff; border:none;"
                         onclick="confirmUserCancelWithOtp()">
@@ -309,6 +318,7 @@
 </style>
 
 <script>
+{% raw %}
 /* ════════════════════════════════════════════════════════════════════════
    USER ORDERS CONTROLLER
    ════════════════════════════════════════════════════════════════════════ */
@@ -342,7 +352,22 @@ const TRACKER_STEPS = [
 
 let _pendingUserCancelId = null;
 
-{% raw %}
+function setUserOtpState(message, type = "info") {
+    const statusEl = document.getElementById("userOtpStatus");
+    const errorEl  = document.getElementById("userOtpError");
+    if (errorEl) errorEl.style.display = "none";
+    if (!statusEl) return;
+
+    const colors = {
+        info: "var(--text-muted)",
+        success: "var(--success)",
+        warning: "var(--warning)",
+        danger: "var(--danger)"
+    };
+    statusEl.textContent = message;
+    statusEl.style.color = colors[type] || colors.info;
+}
+
 /* ────────────────────────────────────────────────────────────────────
    buildTracker(activeIndex)
    activeIndex: 0=Order Placed, 1=Out for Delivery, 2=Delivered, -1=Cancelled
@@ -411,27 +436,43 @@ function parseItemsInvoice(itemsString) {
 
 /* ────────────────────────────────────────────────────────────────────
    Cancel flow — visible ONLY when status === "Order Placed"
-   Step 1: confirm() with ₹50 disclaimer
-   Step 2: OTP modal (demo OTP: 0000)
-   Step 3: POST /api/cancel_order
+   Step 1: open in-app OTP modal with cancellation notice
+   Step 2: send OTP to registered email
+   Step 3: POST /api/cancel_order_with_otp
    ────────────────────────────────────────────────────────────────────  */
-function initiateCancelOrder(orderId) {
+async function initiateCancelOrder(orderId) {
     _pendingUserCancelId = orderId;
-
-    const proceed = confirm(
-        `⚠ Cancel Order ${orderId}?\n\n` +
-        `A cancellation fee of ₹50 will be deducted.\n` +
-        `The remaining balance will be refunded within 2–3 working days.\n\n` +
-        `Proceed to enter cancellation OTP?`
-    );
-    if (!proceed) { _pendingUserCancelId = null; return; }
 
     const otpInput = document.getElementById("userOtpInput");
     const otpError = document.getElementById("userOtpError");
     if (otpInput) otpInput.value = "";
     if (otpError) otpError.style.display = "none";
-
+    setUserOtpState("Sending OTP to your registered email...", "info");
     new bootstrap.Modal(document.getElementById("userOtpModal")).show();
+
+    try {
+        const res  = await fetch("/api/send_cancel_order_otp", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ order_id: orderId })
+        });
+        const data = await res.json();
+
+        if (data.status !== "SUCCESS") {
+            setUserOtpState(
+                data.message || "Could not send cancellation OTP. You can try resend OTP.",
+                "warning"
+            );
+            return;
+        }
+
+        setUserOtpState(`OTP sent to ${data.user_email}.`, "success");
+    } catch (err) {
+        setUserOtpState(
+            "Could not send cancellation OTP right now. Please try resend OTP.",
+            "warning"
+        );
+    }
 }
 
 async function confirmUserCancelWithOtp() {
@@ -439,8 +480,11 @@ async function confirmUserCancelWithOtp() {
     const otpError = document.getElementById("userOtpError");
     const otp = otpInput ? otpInput.value.trim() : "";
 
-    if (otp !== "0000") {
-        if (otpError) otpError.style.display = "block";
+    if (!otp) {
+        if (otpError) {
+            otpError.textContent = "Please enter the OTP.";
+            otpError.style.display = "block";
+        }
         return;
     }
     if (otpError) otpError.style.display = "none";
@@ -448,17 +492,16 @@ async function confirmUserCancelWithOtp() {
     const orderId = _pendingUserCancelId;
     if (!orderId) return;
 
-    bootstrap.Modal.getInstance(document.getElementById("userOtpModal"))?.hide();
-
     try {
-        const res  = await fetch("/api/cancel_order", {
+        const res  = await fetch("/api/cancel_order_with_otp", {
             method:  "POST",
             headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ order_id: orderId })
+            body:    JSON.stringify({ order_id: orderId, otp })
         });
         const data = await res.json();
 
         if (data.status === "SUCCESS") {
+            bootstrap.Modal.getInstance(document.getElementById("userOtpModal"))?.hide();
             const cardEl = document.getElementById(`user-card-${orderId}`);
             if (cardEl) {
                 const artEl   = cardEl.querySelector(".status-art");
@@ -482,15 +525,45 @@ async function confirmUserCancelWithOtp() {
                         <i class="bi bi-x-circle mb-1" style="font-size:1.4rem;"></i><br>Cancelled
                      </span>`;
             }
+            _pendingUserCancelId = null;
         } else {
-            alert(`Cancel failed: ${data.message}`);
+            if (otpError) {
+                otpError.textContent = data.message || "OTP verification failed.";
+                otpError.style.display = "block";
+            }
         }
     } catch (err) {
         console.error(err);
-        alert("Network error. Please try again.");
+        if (otpError) {
+            otpError.textContent = "Network error. Please try again.";
+            otpError.style.display = "block";
+        }
+    }
+}
+
+async function resendUserCancelOtp() {
+    const orderId = _pendingUserCancelId;
+    if (!orderId) {
+        setUserOtpState("No pending order found for OTP resend.", "warning");
+        return;
     }
 
-    _pendingUserCancelId = null;
+    setUserOtpState("Resending OTP...", "info");
+    try {
+        const res  = await fetch("/api/send_cancel_order_otp", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ order_id: orderId })
+        });
+        const data = await res.json();
+        if (data.status === "SUCCESS") {
+            setUserOtpState(`OTP resent to ${data.user_email}.`, "success");
+        } else {
+            setUserOtpState(data.message || "Could not resend OTP.", "warning");
+        }
+    } catch (err) {
+        setUserOtpState("Could not resend OTP right now.", "warning");
+    }
 }
 
 /* ────────────────────────────────────────────────────────────────────
@@ -624,11 +697,11 @@ function buildOrderCard(order) {
     return card;
 }
 
-{% endraw %}
+
 /* ────────────────────────────────────────────────────────────────────
    loadUserOrders — fetches from /api/get_user_orders and renders cards
    ────────────────────────────────────────────────────────────────────  */
-{% raw %}
+
 /* ── Safe order data store — avoids inline JS object literals ── */
 const _orderDataMap = new Map();
 
@@ -730,9 +803,7 @@ function downloadOrderReceipt(orderId) {
     window.location.href = `/api/download_receipt/${orderId}`;
 }
 {% endraw %}
-
 document.addEventListener("DOMContentLoaded", loadUserOrders);
 </script>
 
 {% endblock %}
-
