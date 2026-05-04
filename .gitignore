@@ -7,6 +7,7 @@
 *.pem
 __pycache__/
 config.py
+auth
 .DS_Store
 .vscode/
 *.dat
