@@ -20,8 +20,8 @@ USAGE EXAMPLE (in app.py):
 Team: CodeCrafters | Project: Fresh Picks | SDP-1
 """
 
-import subprocess  # Used to run external programs (our C binaries)
 import os          # Used to build the correct file path
+import subprocess  # Used to run external programs (our C binaries)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -64,14 +64,22 @@ def run_c_binary(executable_name, args_list):
         {"status": "ERROR",   "data": "Wrong password", "raw": "ERROR|Wrong password"}
     """
 
-    # Step 1: Build the full path to the binary
-    # On Linux/Mac: ../backend/auth
-    # On Windows:   ../backend/auth.exe (if you add .exe)
+    # Step 1: Build the full path to the binary.
+    # On Windows, prefer .exe because extensionless MSYS builds are not
+    # valid Win32 executables when launched by Python subprocess.
     binary_path = os.path.join(BACKEND_DIR, executable_name)
+    if os.name == "nt":
+        exe_path = binary_path + ".exe"
+        if os.path.exists(exe_path):
+            binary_path = exe_path
 
     # Step 2: Build the full command list
     # Example: ["../backend/auth", "login_user", "User", "User@123"]
     command = [binary_path] + args_list
+    env = os.environ.copy()
+    if os.name == "nt":
+        msys_paths = [r"C:\msys64\ucrt64\bin", r"C:\msys64\usr\bin"]
+        env["PATH"] = os.pathsep.join(msys_paths + [env.get("PATH", "")])
 
     try:
         # Step 3: Run the command
@@ -79,12 +87,15 @@ def run_c_binary(executable_name, args_list):
         # text=True            -> returns strings instead of bytes
         # timeout=10           -> kill if takes more than 10 seconds
         # cwd=BACKEND_DIR      -> to run C binary INSIDE the backend folder
+        timeout_seconds = 60 if executable_name == "mailer" else 10
+
         result = subprocess.run(
             command,
             capture_output=True,
             text=True,
-            timeout=10,
-            cwd=BACKEND_DIR  # <--- ADD THIS LINE
+            timeout=timeout_seconds,
+            cwd=BACKEND_DIR,
+            env=env
         )
 
         # Step 4: Get the output from stdout and clean whitespace

@@ -1,23 +1,30 @@
 #!/bin/bash
-# =============================================================
-# build.sh - Fresh Picks: C Backend Compilation Script (v3)
-# =============================================================
-# SPRINT 3 ADDITIONS:
-#   - Compiles receipt.c -> receipt binary (PDF data extractor)
-#
-# HOW TO RUN:
-#   Linux / macOS:   chmod +x build.sh && ./build.sh
-#   Windows (Bash):  bash build.sh
-#
-# Team: CodeCrafters | Project: Fresh Picks | SDP-1
-# =============================================================
+# Fresh Picks - C backend build script
+
+set -e
 
 echo "================================================"
 echo "  Fresh Picks - Building C Backend Binaries"
 echo "================================================"
 
-# Navigate to the backend directory
 cd "$(dirname "$0")"
+
+if command -v gcc >/dev/null 2>&1; then
+    CC="gcc"
+elif [ -x "/c/msys64/ucrt64/bin/gcc.exe" ]; then
+    export PATH="/c/msys64/ucrt64/bin:/c/msys64/usr/bin:$PATH"
+    CC="/c/msys64/ucrt64/bin/gcc.exe"
+elif [ -x "/mingw64/bin/gcc.exe" ]; then
+    export PATH="/mingw64/bin:/usr/bin:$PATH"
+    CC="/mingw64/bin/gcc.exe"
+else
+    echo "ERROR: gcc was not found."
+    echo "Install MSYS2 GCC, or add C:\\msys64\\ucrt64\\bin to PATH."
+    exit 1
+fi
+
+echo "Using compiler: $CC"
+echo ""
 
 # ── 1. order binary ─────────────────────────────────────────────
 echo "[1/8] Compiling order..."
@@ -55,15 +62,14 @@ gcc -Wall -Wextra -o analytics analytics.c utils.c -lm
 echo "      ✓ analytics compiled successfully"
 
 # ── 8. mailer binary ───────────────────────────────────────────
-echo "[7/8] Compiling mailer..."
-gcc -Wall -Wextra -o mailer mailer.c -lcurl
+echo "[8/8] Compiling mailer..."
+gcc -Wall -Wextra -o mailer mailer.c -lm
 echo "      ✓ mailer compiled successfully"
 
-# ── Create the carts/ directory if it doesn't exist ─────────────
 echo ""
 echo "[Setup] Creating carts/ directory..."
 mkdir -p carts
-echo "        ✓ carts/ directory ready"
+echo "        carts/ directory ready"
 
 echo ""
 echo "  All binaries compiled successfully!"
@@ -77,11 +83,7 @@ echo "  All binaries compiled successfully!"
 
 echo ""
 echo "================================================"
-echo "  All binaries compiled! Ready to run Flask."
+echo "  All binaries compiled. Ready to run Flask."
 echo ""
-echo "  Next step: Run app.py"
-echo "  Git Bash:    cd ../app && python app.py"
-echo "  PowerShell:  cd ../app; python app.py"
-echo "  macOS/Linux: cd ../app && python3 app.py"
-echo ""
+echo "  PowerShell: cd ../app; python app.py"
 echo "================================================"

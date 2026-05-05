@@ -8,7 +8,6 @@
 __pycache__/
 config.py
 auth
+mailer.env
 .DS_Store
 .vscode/
-*.dat
-__pycache__/
