@@ -12,3 +12,10 @@ backend/mailer.env
 .vscode/
 *.dat
 __pycache__/
+backend/auth
+backend/delivery
+backend/inventory
+backend/mailer
+backend/order
+backend/receipt
+backend/users

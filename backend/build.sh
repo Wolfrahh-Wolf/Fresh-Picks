@@ -51,7 +51,14 @@ echo "[6/7] Compiling users..."
 echo "      users compiled successfully"
 
 echo "[7/7] Compiling mailer..."
-"$CC" -Wall -Wextra -o mailer mailer.c
+if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists libcurl; then
+    CURL_FLAGS="$(pkg-config --cflags --libs libcurl)"
+elif command -v curl-config >/dev/null 2>&1; then
+    CURL_FLAGS="$(curl-config --cflags --libs)"
+else
+    CURL_FLAGS="-lcurl"
+fi
+"$CC" -Wall -Wextra -o mailer mailer.c $CURL_FLAGS
 echo "      mailer compiled successfully"
 
 echo ""

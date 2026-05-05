@@ -6,7 +6,7 @@
     ✔ Horizontal flex cards (not inline pills for items)
     ✔ "View Items" button → Modal with invoice table (PRODUCT|RATE|QTY|AMOUNT)
     ✔ Cancel button: visible only when status == "Order Placed"
-      → In-app OTP modal → /api/cancel_order
+      → In-app OTP modal → /api/cancel_order_with_otp
     ✔ Actual Delivery Agent Name + Phone shown (from boy_name / boy_phone)
     ✔ Vertical timeline: "Delivered" step shows ✔ checkmark inside glowing circle
     ✔ All JS template literals in {% raw %} ... {% endraw %}
@@ -104,7 +104,7 @@
                         Enter Cancellation OTP
                     </label>
                     <input type="text" id="userOtpInput" class="form-control"
-                           placeholder="0000" maxlength="6"
+                           placeholder="4-digit code" maxlength="6"
                            style="background:var(--bg-elevated); color:var(--text-bright);
                                   border:1px solid var(--border-color); font-family:var(--font-mono);
                                   letter-spacing:0.2em; font-size:1.2rem; text-align:center;">

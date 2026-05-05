@@ -15,11 +15,11 @@
   TWO-STEP FLOW:
     Step 1 — Registration Form:
       User enters: Full Name, Email, Phone, Address, Username, Password, Confirm Password
-      On submit → validate locally → POST to /api/register → C binary writes to users.txt
-      → On SUCCESS: Open OTP Modal
+      On submit → validate locally → POST to /api/register
+      → On SUCCESS: Open OTP Modal and finish signup only after OTP verification
 
     Step 2 — OTP Modal:
-      A mock OTP "0000" is displayed in the modal.
+      A real OTP is emailed to the registered address.
       User types it in and clicks Verify.
       On correct OTP → redirect to login.
 
@@ -241,7 +241,7 @@
                 <input type="text"
                        class="form-control otp-field"
                        id="otpInput"
-                       placeholder="0000"
+                       placeholder="4-digit code"
                        maxlength="4">
 
             </div>
@@ -473,7 +473,7 @@
 
     /*
      * FUNCTION: handleOtpVerify
-     * PURPOSE:  Check the typed OTP against the mock "0000".
+     * PURPOSE:  Verify the typed OTP with the server.
      *           On success: close modal and redirect to login.
      *           On failure: show error inside the modal.
      */
@@ -499,6 +499,18 @@
             const result = await response.json();
 
             if (result.status !== "SUCCESS") {
+                if (result.restart_required) {
+                    otpModal.hide();
+                    showAlert(
+                        `<i class="bi bi-x-circle me-1"></i>${result.message || "Registration failed. Please try again."}`,
+                        "danger"
+                    );
+                    const registerBtn = document.getElementById("registerBtn");
+                    registerBtn.disabled  = false;
+                    registerBtn.innerHTML = '<i class="bi bi-send me-2"></i>Register';
+                    return;
+                }
+
                 showOtpAlert(
                     `<i class="bi bi-x-circle me-1"></i>${result.message || "OTP verification failed."}`,
                     "danger"

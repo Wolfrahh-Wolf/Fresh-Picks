@@ -17,9 +17,11 @@ ROUTES:
   GET  /admin_orders            -> Admin orders dispatch page
   GET  /logout                  -> Clear session and redirect to home
   POST /api/login               -> Validate login via C auth binary
-  POST /api/register            -> Register new user via C auth binary
+  POST /api/register            -> Stage new user signup and send OTP
   POST /api/get_profile         -> Fetch profile data via C auth binary
   POST /api/update_profile      -> Update one profile field
+  POST /api/send_password_change_otp -> Send OTP for password change
+  POST /api/resend_password_change_otp -> Resend OTP for password change
   POST /api/change_password     -> Unified password change (user OR admin)
   GET  /api/list_products       -> List all vegetables via C order binary
   POST /api/update_stock        -> Update vegetable stock (admin only)
@@ -34,7 +36,8 @@ ROUTES:
   POST /api/get_admin_orders    -> Get all orders newest-first (admin)
   POST /api/update_order_status -> Update order status (admin only)
   POST /api/promote_slot_orders -> Batch-promote slot orders (admin only)
-  POST /api/cancel_order        -> Cancel an order
+  POST /api/send_cancel_order_otp -> Send OTP for order cancellation
+  POST /api/cancel_order_with_otp -> Cancel an order after OTP validation
   GET  /api/get_active_orders   -> Get active (placed/OFD) orders (admin)
   POST /api/assign_agent        -> Assign delivery agent (admin only)
   GET  /api/download_receipt/<order_id> -> Generate and stream PDF receipt
@@ -45,6 +48,7 @@ Team: CodeCrafters | Project: Fresh Picks | SDP-1
 
 import ssl
 import os
+import re
 import secrets
 import tempfile
 import razorpay
@@ -355,7 +359,28 @@ def _send_otp_email(recipient_email, otp_code, purpose, reference=""):
     return run_c_binary("mailer", args)
 
 
-def _start_otp_flow(flow_key, recipient_email, purpose, reference=""):
+def _is_valid_email(value):
+    """
+    PURPOSE: Lightweight email sanity check for OTP recipients.
+    """
+    return bool(value and "@" in value and " " not in value)
+
+
+def _is_strong_password(value):
+    """
+    PURPOSE: Server-side password policy for registration and password change.
+    """
+    return bool(
+        value and
+        len(value) >= 8 and
+        re.search(r"[A-Z]", value) and
+        re.search(r"[a-z]", value) and
+        re.search(r"[0-9]", value) and
+        re.search(r"[^A-Za-z0-9]", value)
+    )
+
+
+def _start_otp_flow(flow_key, recipient_email, purpose, reference="", payload=None):
     """
     PURPOSE: Generate, store, and email an OTP for one flow.
     """
@@ -371,7 +396,22 @@ def _start_otp_flow(flow_key, recipient_email, purpose, reference=""):
             datetime.utcnow() + timedelta(minutes=OTP_TTL_MINUTES)
         ).timestamp()
     }
+    if payload is not None:
+        OTP_STORE[_otp_store_key(flow_key)]["payload"] = payload
     return _send_otp_email(recipient_email, otp_code, purpose, reference)
+
+
+def _restart_otp_flow(flow_key, otp_state):
+    """
+    PURPOSE: Re-issue an OTP using the existing flow metadata.
+    """
+    return _start_otp_flow(
+        flow_key,
+        otp_state["recipient_email"],
+        otp_state["purpose"],
+        otp_state.get("reference", ""),
+        otp_state.get("payload")
+    )
 
 
 def _get_otp_flow(flow_key):
@@ -404,6 +444,96 @@ def _validate_otp_flow(flow_key, entered_code, reference=""):
         return False, "Incorrect OTP. Please try again."
 
     return True, ""
+
+
+def _parse_user_profile_data(raw_data):
+    """
+    PURPOSE: Convert get_profile output into a dict for server-side helpers.
+    """
+    parts = raw_data.split("|")
+    return {
+        "user_id": parts[0] if len(parts) > 0 else "",
+        "username": parts[1] if len(parts) > 1 else "",
+        "full_name": parts[2] if len(parts) > 2 else "",
+        "email": parts[3] if len(parts) > 3 else "",
+        "phone": parts[4] if len(parts) > 4 else "",
+        "address": parts[5] if len(parts) > 5 else "",
+    }
+
+
+def _parse_admin_profile_data(raw_data):
+    """
+    PURPOSE: Convert get_admin_profile output into a dict for OTP helpers.
+    """
+    parts = raw_data.split("|")
+    return {
+        "admin_id": parts[0] if len(parts) > 0 else "",
+        "username": parts[1] if len(parts) > 1 else "",
+        "admin_name": parts[2] if len(parts) > 2 else "",
+        "email": parts[3] if len(parts) > 3 else "",
+    }
+
+
+def _load_current_account_email():
+    """
+    PURPOSE: Fetch the logged-in account's registered email for OTP delivery.
+    RETURNS: (email, error_response_tuple_or_None)
+    """
+    cached_email = session.get("email", "").strip()
+    if _is_valid_email(cached_email):
+        return cached_email, None
+
+    if "user_id" not in session:
+        return None, (jsonify({"status": "ERROR", "message": "Not logged in"}), 401)
+
+    if session.get("role") == "admin":
+        result = run_c_binary("auth", ["get_admin_profile", session["user_id"]])
+        if result["status"] != "SUCCESS":
+            return None, (
+                jsonify({
+                    "status": "ERROR",
+                    "message": result.get("data", "Could not load admin profile")
+                }),
+                500
+            )
+        email = _parse_admin_profile_data(result["data"]).get("email", "").strip()
+    else:
+        result = run_c_binary("auth", ["get_profile", session["user_id"]])
+        if result["status"] != "SUCCESS":
+            return None, (
+                jsonify({
+                    "status": "ERROR",
+                    "message": result.get("data", "Could not load user profile")
+                }),
+                500
+            )
+        email = _parse_user_profile_data(result["data"]).get("email", "").strip()
+
+    if not _is_valid_email(email):
+        return None, (
+            jsonify({
+                "status": "ERROR",
+                "message": "No valid email is registered for this account"
+            }),
+            400
+        )
+
+    session["email"] = email
+    return email, None
+
+
+def _password_change_flow_key():
+    """
+    PURPOSE: Unique OTP key for the current logged-in account's password flow.
+    """
+    return f"password_change:{session.get('role', 'user')}:{session.get('user_id', '')}"
+
+
+def _cancel_order_flow_key(order_id):
+    """
+    PURPOSE: Separate user/admin cancellation OTP state for the same order.
+    """
+    return f"cancel_order:{session.get('role', 'guest')}:{order_id}"
 
 # =============================================================
 # PAGE ROUTES — Serve HTML templates
@@ -592,12 +722,15 @@ def api_login():
     # ── Populate session ──────────────────────────────────────
     session["role"]     = role
     session["username"] = username
+    session.pop("email", None)
+    session.pop("admin_name", None)
 
     if role == "admin":
-        # Admin C output: SUCCESS|admin_id|admin_name
+        # Admin C output: SUCCESS|admin_id|admin_name|email
         admin_parts          = result["data"].split("|")
         session["user_id"]   = admin_parts[0] if len(admin_parts) > 0 else "A1001"
         session["admin_name"]= admin_parts[1] if len(admin_parts) > 1 else "Admin"
+        session["email"]     = admin_parts[2] if len(admin_parts) > 2 else ""
     else:
         # User C output: SUCCESS|user_id
         session["user_id"] = result["data"]
@@ -613,39 +746,53 @@ def api_register():
     Body: { "username", "password", "full_name", "email", "phone",
             "door", "street", "area", "pincode" }
 
-    Calls: ./auth register <username> <password> <full_name> <email>
-                           <phone> <address>
-    Address is assembled as: "door,street,area,pincode"
+    Stages the registration payload server-side and emails an OTP.
+    The actual auth register call only happens after OTP verification.
     """
     data = request.get_json() or {}
 
-    username  = data.get("username",  "")
+    username  = data.get("username",  "").strip()
     password  = data.get("password",  "")
-    full_name = data.get("full_name", "")
-    email     = data.get("email",     "")
-    phone     = data.get("phone",     "")
-    door      = data.get("door",      "")
-    street    = data.get("street",    "")
-    area      = data.get("area",      "")
-    pincode   = data.get("pincode",   "")
+    full_name = data.get("full_name", "").strip()
+    email     = data.get("email",     "").strip()
+    phone     = data.get("phone",     "").strip()
+    door      = data.get("door",      "").strip()
+    street    = data.get("street",    "").strip()
+    area      = data.get("area",      "").strip()
+    pincode   = data.get("pincode",   "").strip()
 
     required = [username, password, full_name, email, phone, door, street, area, pincode]
     if not all(required):
         return jsonify({"status": "ERROR", "message": "All fields required"})
+    if not _is_valid_email(email):
+        return jsonify({"status": "ERROR", "message": "A valid email is required"})
+    if not _is_strong_password(password):
+        return jsonify({
+            "status": "ERROR",
+            "message": "Password must be 8+ chars with uppercase, lowercase, digit, and special character."
+        })
 
     address = f"{door},{street},{area},{pincode}"
-    result  = run_c_binary("auth", ["register", username, password,
-                                    full_name, email, phone, address])
-
-    if result["status"] != "SUCCESS":
-        return jsonify({"status": "ERROR", "message": result["data"]})
-
-    otp_result = _start_otp_flow("register", email.strip(), "register", username.strip())
+    pending_registration = {
+        "username": username,
+        "password": password,
+        "full_name": full_name,
+        "email": email,
+        "phone": phone,
+        "address": address,
+    }
+    otp_result = _start_otp_flow(
+        "register",
+        email,
+        "register",
+        username,
+        payload=pending_registration
+    )
 
     response = {
         "status":   "SUCCESS",
-        "message":  "Registration successful",
-        "user_email": email.strip(),
+        "message":  "Registration OTP created. Complete verification to finish signup.",
+        "user_email": email,
         "otp_sent": otp_result["status"] == "SUCCESS",
         "otp_message": (
             "Verification OTP sent to your registered email."
@@ -661,7 +808,8 @@ def api_verify_registration_otp():
     """
     POST /api/verify_registration_otp
     Body: { "otp": "1234" }
-    Verifies the OTP generated during the registration flow.
+    Verifies the OTP generated during the registration flow and commits
+    the pending registration through the C auth binary.
     """
     data = request.get_json(silent=True) or {}
     otp  = data.get("otp", "").strip()
@@ -669,12 +817,46 @@ def api_verify_registration_otp():
     if not otp:
         return jsonify({"status": "ERROR", "message": "OTP is required"})
 
+    otp_state = _get_otp_flow("register")
+    if not otp_state:
+        return jsonify({
+            "status": "ERROR",
+            "message": "OTP expired or not found. Please register again.",
+            "restart_required": True
+        }), 400
+
     is_valid, message = _validate_otp_flow("register", otp)
     if not is_valid:
         return jsonify({"status": "ERROR", "message": message})
 
+    payload = otp_state.get("payload") or {}
+    required_fields = ["username", "password", "full_name", "email", "phone", "address"]
+    if not all(payload.get(field, "") for field in required_fields):
+        _clear_otp_flow("register")
+        return jsonify({
+            "status": "ERROR",
+            "message": "Registration session expired. Please register again.",
+            "restart_required": True
+        }), 400
+
+    result = run_c_binary("auth", [
+        "register",
+        payload["username"],
+        payload["password"],
+        payload["full_name"],
+        payload["email"],
+        payload["phone"],
+        payload["address"],
+    ])
     _clear_otp_flow("register")
-    return jsonify({"status": "SUCCESS", "message": "Registration OTP verified"})
+    if result["status"] != "SUCCESS":
+        return jsonify({
+            "status": "ERROR",
+            "message": result.get("data", "Could not complete registration"),
+            "restart_required": True
+        }), 400
+
+    return jsonify({"status": "SUCCESS", "message": "Registration completed successfully"})
 
 
 @app.route("/api/resend_registration_otp", methods=["POST"])
@@ -690,12 +872,7 @@ def api_resend_registration_otp():
             "message": "Registration OTP session expired. Please register again."
         }), 400
 
-    otp_result = _start_otp_flow(
-        "register",
-        otp_state["recipient_email"],
-        otp_state["purpose"],
-        otp_state.get("reference", "")
-    )
+    otp_result = _restart_otp_flow("register", otp_state)
 
     if otp_result["status"] != "SUCCESS":
         return jsonify({
@@ -744,15 +921,17 @@ def api_get_profile():
     if result["status"] != "SUCCESS":
         return jsonify({"status": "ERROR", "message": result["data"]})
 
-    parts = result["data"].split("|")
+    profile = _parse_user_profile_data(result["data"])
+    if _is_valid_email(profile["email"]):
+        session["email"] = profile["email"]
     return jsonify({
         "status":    "SUCCESS",
-        "user_id":   parts[0] if len(parts) > 0 else "",
-        "username":  parts[1] if len(parts) > 1 else "",
-        "full_name": parts[2] if len(parts) > 2 else "",
-        "email":     parts[3] if len(parts) > 3 else "",
-        "phone":     parts[4] if len(parts) > 4 else "",
-        "address":   parts[5] if len(parts) > 5 else "",
+        "user_id":   profile["user_id"],
+        "username":  profile["username"],
+        "full_name": profile["full_name"],
+        "email":     profile["email"],
+        "phone":     profile["phone"],
+        "address":   profile["address"],
     })
 
 
@@ -778,16 +957,84 @@ def api_update_profile():
 
     result = run_c_binary("auth", ["update_profile", session["user_id"],
                                    field, new_value])
+    if result["status"] == "SUCCESS" and field == "email":
+        session["email"] = new_value
     return jsonify({"status": result["status"], "message": result["data"]})
+
+
+@app.route("/api/send_password_change_otp", methods=["POST"])
+def api_send_password_change_otp():
+    """
+    POST /api/send_password_change_otp
+    Emails an OTP to the logged-in user's registered account email.
+    """
+    if "user_id" not in session:
+        return jsonify({"status": "ERROR", "message": "Not logged in"}), 401
+
+    recipient_email, error_response = _load_current_account_email()
+    if error_response:
+        return error_response
+
+    flow_key = _password_change_flow_key()
+    reference = f"{session.get('role', 'user')}:{session.get('user_id', '')}"
+    otp_result = _start_otp_flow(
+        flow_key,
+        recipient_email,
+        "password_change",
+        reference
+    )
+
+    if otp_result["status"] != "SUCCESS":
+        return jsonify({
+            "status": "ERROR",
+            "message": otp_result.get("data", "Could not send password OTP")
+        }), 500
+
+    return jsonify({
+        "status": "SUCCESS",
+        "message": "Password OTP sent successfully",
+        "user_email": recipient_email
+    })
+
+
+@app.route("/api/resend_password_change_otp", methods=["POST"])
+def api_resend_password_change_otp():
+    """
+    POST /api/resend_password_change_otp
+    Re-issues the pending password-change OTP.
+    """
+    if "user_id" not in session:
+        return jsonify({"status": "ERROR", "message": "Not logged in"}), 401
+
+    flow_key = _password_change_flow_key()
+    otp_state = _get_otp_flow(flow_key)
+    if not otp_state:
+        return jsonify({
+            "status": "ERROR",
+            "message": "Password OTP session expired. Start the password change flow again."
+        }), 400
+
+    otp_result = _restart_otp_flow(flow_key, otp_state)
+    if otp_result["status"] != "SUCCESS":
+        return jsonify({
+            "status": "ERROR",
+            "message": otp_result.get("data", "Could not resend password OTP")
+        }), 500
+
+    return jsonify({
+        "status": "SUCCESS",
+        "message": "Password OTP resent successfully",
+        "user_email": otp_state["recipient_email"]
+    })
 
 
 @app.route("/api/change_password", methods=["POST"])
 def api_change_password():
     """
     POST /api/change_password
-    Body: { "old_password": "...", "new_password": "..." }
+    Body: { "old_password": "...", "new_password": "...", "otp": "1234" }
 
-    Routes to the correct C command based on session role:
+    Verifies the OTP server-side, then routes to the correct C command:
       user  → ./auth change_pass_user  <user_id> <old> <new>
       admin → ./auth change_pass_admin <user_id> <old> <new>
     """
@@ -797,6 +1044,33 @@ def api_change_password():
     data  = request.get_json() or {}
     old_p = data.get("old_password", "").strip()
     new_p = data.get("new_password", "").strip()
+    otp   = data.get("otp", "").strip()
+
+    if not old_p or not new_p:
+        return jsonify({"status": "ERROR", "message": "Old and new passwords are required"}), 400
+    if not _is_strong_password(new_p):
+        return jsonify({
+            "status": "ERROR",
+            "message": "New password must be 8+ chars with uppercase, lowercase, digit, and special character."
+        }), 400
+    if not otp:
+        return jsonify({
+            "status": "ERROR",
+            "message": "OTP is required",
+            "otp_error": True
+        }), 400
+
+    flow_key = _password_change_flow_key()
+    reference = f"{session.get('role', 'user')}:{session.get('user_id', '')}"
+    is_valid, message = _validate_otp_flow(flow_key, otp, reference=reference)
+    if not is_valid:
+        return jsonify({
+            "status": "ERROR",
+            "message": message,
+            "otp_error": True
+        }), 400
+
+    _clear_otp_flow(flow_key)
 
     cmd = "change_pass_admin" if session.get("role") == "admin" else "change_pass_user"
     result = run_c_binary("auth", [cmd, session["user_id"], old_p, new_p])
@@ -1346,9 +1620,9 @@ def api_send_cancel_order_otp():
     """
     POST /api/send_cancel_order_otp
     Body: { "order_id": "ORD1007" }
-    Emails a cancellation OTP to the owner of the order.
+    Emails a cancellation OTP to the active account tied to the flow.
     """
-    if session.get("role") != "user":
+    if session.get("role") not in {"user", "admin"}:
         return jsonify({"status": "ERROR", "message": "Login required"}), 403
 
     data     = request.get_json(silent=True) or {}
@@ -1361,21 +1635,29 @@ def api_send_cancel_order_otp():
     if error_response:
         return error_response
 
-    if receipt_data["user_id"] != session.get("user_id"):
-        return jsonify({"status": "ERROR", "message": "Order does not belong to this user"}), 403
-
     if receipt_data["status"] != "Order Placed":
         return jsonify({
             "status": "ERROR",
             "message": "Only Order Placed orders can be cancelled"
         }), 400
 
-    user_email = receipt_data.get("user_email", "").strip()
-    if not user_email or "@" not in user_email:
-        return jsonify({"status": "ERROR", "message": "No valid email found for this order"}), 400
+    if session.get("role") == "user" and receipt_data["user_id"] != session.get("user_id"):
+        return jsonify({"status": "ERROR", "message": "Order does not belong to this user"}), 403
 
-    flow_key   = f"cancel_order:{order_id}"
-    otp_result = _start_otp_flow(flow_key, user_email, "cancel_order", order_id)
+    if session.get("role") == "admin":
+        recipient_email, error_response = _load_current_account_email()
+        if error_response:
+            return error_response
+    else:
+        recipient_email = receipt_data.get("user_email", "").strip()
+        if not _is_valid_email(recipient_email):
+            return jsonify({
+                "status": "ERROR",
+                "message": "No valid email found for this order"
+            }), 400
+
+    flow_key   = _cancel_order_flow_key(order_id)
+    otp_result = _start_otp_flow(flow_key, recipient_email, "cancel_order", order_id)
 
     if otp_result["status"] != "SUCCESS":
         return jsonify({
@@ -1386,7 +1668,7 @@ def api_send_cancel_order_otp():
     return jsonify({
         "status": "SUCCESS",
         "message": "Cancellation OTP sent successfully",
-        "user_email": user_email
+        "user_email": recipient_email
     })
 
 
@@ -1395,9 +1677,9 @@ def api_cancel_order_with_otp():
     """
     POST /api/cancel_order_with_otp
     Body: { "order_id": "ORD1007", "otp": "1234" }
-    Verifies the user's OTP before cancelling the order.
+    Verifies the active user/admin OTP before cancelling the order.
     """
-    if session.get("role") != "user":
+    if session.get("role") not in {"user", "admin"}:
         return jsonify({"status": "ERROR", "message": "Login required"}), 403
 
     data     = request.get_json(silent=True) or {}
@@ -1413,7 +1695,7 @@ def api_cancel_order_with_otp():
     if error_response:
         return error_response
 
-    if receipt_data["user_id"] != session.get("user_id"):
+    if session.get("role") == "user" and receipt_data["user_id"] != session.get("user_id"):
         return jsonify({"status": "ERROR", "message": "Order does not belong to this user"}), 403
 
     if receipt_data["status"] != "Order Placed":
@@ -1422,7 +1704,7 @@ def api_cancel_order_with_otp():
             "message": "Only Order Placed orders can be cancelled"
         }), 400
 
-    flow_key = f"cancel_order:{order_id}"
+    flow_key = _cancel_order_flow_key(order_id)
     is_valid, message = _validate_otp_flow(flow_key, otp, reference=order_id)
     if not is_valid:
         return jsonify({"status": "ERROR", "message": message}), 400
@@ -1440,22 +1722,12 @@ def api_cancel_order():
     POST /api/cancel_order
     Body: { "order_id": "ORD1007" }
 
-    Business rules enforced in delivery.c:
-      - Only "Order Placed" orders may be cancelled.
-    Calls: ./delivery cancel_order <order_id>
-    Returns: { "status": "SUCCESS"|"ERROR", "message": "..." }
+    Legacy route kept only to block non-OTP order cancellations.
     """
-    if "user_id" not in session:
-        return jsonify({"status": "ERROR", "message": "Not logged in"}), 401
-
-    data     = request.get_json(silent=True) or {}
-    order_id = data.get("order_id", "").strip()
-
-    if not order_id:
-        return jsonify({"status": "ERROR", "message": "order_id is required"})
-
-    result = run_c_binary("delivery", ["cancel_order", order_id])
-    return jsonify({"status": result["status"], "message": result.get("data", "")})
+    return jsonify({
+        "status": "ERROR",
+        "message": "Cancellation now requires OTP verification. Use /api/cancel_order_with_otp."
+    }), 400
 
 
 @app.route("/api/get_active_orders", methods=["GET"])

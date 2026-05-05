@@ -17,7 +17,7 @@
       Reveals new + confirm password fields with the strength meter.
 
     Step 3 — OTP Verification:
-      A Bootstrap modal appears with mock OTP "0000".
+      A Bootstrap modal appears after an OTP is sent to the registered email.
       User types it in and clicks "Verify".
       → If OTP is correct: POST to /api/change_password
       → On SUCCESS: show success message.
@@ -211,10 +211,9 @@
 
 <!-- ══════════════════════════════════════════════════════
      OTP VERIFICATION MODAL
-     Opens when Step 2 is complete. User must type "0000".
-     The actual /api/change_password call happens AFTER
-     the OTP is verified — so no API call is made if the
-     user enters the wrong OTP.
+     Opens when Step 2 is complete and the server has emailed an OTP.
+     The actual /api/change_password call happens with the OTP included,
+     so the password update is enforced server-side.
 
      data-bs-backdrop="static"  -> cannot close by clicking outside
      data-bs-keyboard="false"   -> cannot close with Escape key
@@ -244,21 +243,16 @@
             <!-- Modal Body -->
             <div class="modal-body p-4">
 
-                <!-- OTP Display -->
+                <!-- OTP Delivery Status -->
                 <div class="alert alert-info mb-4">
-                    <strong><i class="bi bi-info-circle me-1"></i>Demo OTP Generated</strong><br>
+                    <strong><i class="bi bi-envelope-check me-1"></i>Email Verification Required</strong><br>
                     <span style="font-size:0.82rem;color:var(--text-muted);">
-                        In production, this would be sent to your registered email.
+                        We will send a one-time password to your registered email address.
+                        The code remains valid for 10 minutes.
                     </span>
-                    <div class="mt-2">
-                        Your code:
-                        <strong style="font-family:var(--font-mono);
-                                       font-size:2rem;
-                                       color:var(--success);
-                                       letter-spacing:0.4em;
-                                       display:block;">
-                            0000
-                        </strong>
+                    <div class="mt-2" id="otpStatusText"
+                         style="font-size:0.82rem;color:var(--text-muted);">
+                        We will send the OTP when you continue.
                     </div>
                 </div>
 
@@ -272,7 +266,7 @@
                 <input type="text"
                        class="form-control otp-field"
                        id="otpInput"
-                       placeholder="0000"
+                       placeholder="4-digit code"
                        maxlength="4">
 
             </div>
@@ -280,6 +274,13 @@
             <!-- Modal Footer -->
             <div class="modal-footer"
                  style="border-top:1px solid var(--border-color);">
+                <button type="button"
+                        class="btn"
+                        id="resendOtpBtn"
+                        style="background:var(--bg-elevated);color:var(--text-muted);"
+                        onclick="resendPasswordChangeOtp()">
+                    <i class="bi bi-arrow-repeat me-1"></i>Resend OTP
+                </button>
                 <button type="button"
                         class="btn"
                         id="verifyOtpBtn"
@@ -305,11 +306,10 @@
      * Manages the 3-step password change flow:
      *   Step 1: Capture old password
      *   Step 2: Capture + validate new password (with strength meter)
-     *   OTP Modal: Verify "0000", then call /api/change_password
+     *   OTP Modal: Send, resend, and verify server-side email OTP
      */
 
-    const MOCK_OTP = "0000"; /* Mock OTP for demo */
-    let otpModal;            /* Bootstrap Modal instance */
+    let otpModal; /* Bootstrap Modal instance */
 
     /* Initialize modal object when DOM is ready */
     document.addEventListener("DOMContentLoaded", function () {
@@ -365,6 +365,19 @@
         box.className = `alert alert-${type}`;
         box.innerHTML = message;
         box.classList.remove("d-none");
+    }
+
+    function setOtpStatus(message) {
+        document.getElementById("otpStatusText").textContent = message;
+    }
+
+    function resetPasswordFlowUi() {
+        document.getElementById("old_password").disabled = false;
+        document.getElementById("step1Btn").classList.remove("d-none");
+        document.getElementById("step2Section").classList.add("d-none");
+        document.getElementById("verifyOtpBtn").disabled = false;
+        document.getElementById("verifyOtpBtn").innerHTML =
+            '<i class="bi bi-check-circle me-1"></i>Verify & Change Password';
     }
 
     /*
@@ -440,9 +453,9 @@
      * PURPOSE:  Validate Step 2 inputs (new password + confirm match
      *           and meet complexity), then open the OTP modal.
      *           Complexity is also enforced in C, but we pre-check here
-     *           for instant feedback.
+     *           for instant feedback, then request the server OTP.
      */
-    function proceedToOtp() {
+    async function proceedToOtp() {
         const new_pass  = document.getElementById("new_password").value.trim();
         const confirm   = document.getElementById("confirm_password").value.trim();
 
@@ -474,19 +487,85 @@
             return;
         }
 
-        /* All client-side checks passed — open OTP modal */
-        document.getElementById("mainAlertBox").classList.add("d-none");
-        document.getElementById("otpAlertBox").classList.add("d-none");
-        document.getElementById("otpInput").value = "";
-        otpModal.show();
-        setTimeout(() => document.getElementById("otpInput").focus(), 400);
+        const step2Btn = document.getElementById("step2Btn");
+        step2Btn.disabled = true;
+        step2Btn.innerHTML = '<span class="spinner-sm"></span> Sending OTP...';
+
+        try {
+            const response = await fetch("/api/send_password_change_otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: "{}"
+            });
+            const result = await response.json();
+
+            if (result.status !== "SUCCESS") {
+                showMainAlert(
+                    `<i class="bi bi-exclamation-triangle me-1"></i>${result.message || "Could not send OTP right now."}`,
+                    "danger"
+                );
+                return;
+            }
+
+            document.getElementById("mainAlertBox").classList.add("d-none");
+            document.getElementById("otpAlertBox").classList.add("d-none");
+            document.getElementById("otpInput").value = "";
+            setOtpStatus(`OTP sent to ${result.user_email}.`);
+            otpModal.show();
+            setTimeout(() => document.getElementById("otpInput").focus(), 400);
+        } catch (err) {
+            showMainAlert(
+                '<i class="bi bi-exclamation-triangle me-1"></i>Could not send OTP right now. Please try again.',
+                "danger"
+            );
+        } finally {
+            step2Btn.disabled = false;
+            step2Btn.innerHTML = '<i class="bi bi-key me-2"></i>Verify with OTP';
+        }
+    }
+
+    async function resendPasswordChangeOtp() {
+        const resendBtn = document.getElementById("resendOtpBtn");
+        resendBtn.disabled = true;
+        setOtpStatus("Resending OTP...");
+
+        try {
+            const response = await fetch("/api/resend_password_change_otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: "{}"
+            });
+            const result = await response.json();
+
+            if (result.status === "SUCCESS") {
+                setOtpStatus(`OTP resent to ${result.user_email}.`);
+                showOtpAlert(
+                    '<i class="bi bi-envelope-check me-1"></i>Password OTP resent successfully.',
+                    "info"
+                );
+            } else {
+                setOtpStatus(result.message || "Could not resend OTP.");
+                showOtpAlert(
+                    `<i class="bi bi-exclamation-triangle me-1"></i>${result.message || "Could not resend OTP."}`,
+                    "warning"
+                );
+            }
+        } catch (err) {
+            setOtpStatus("Could not resend OTP right now.");
+            showOtpAlert(
+                '<i class="bi bi-exclamation-triangle me-1"></i>Could not resend OTP right now.',
+                "warning"
+            );
+        } finally {
+            resendBtn.disabled = false;
+        }
     }
 
     /*
      * FUNCTION: handleOtpAndChangePassword
      * PURPOSE:  This is the FINAL step. It:
-     *   1. Checks the OTP is "0000"
-     *   2. Calls /api/change_password with old + new passwords
+     *   1. Sends the typed OTP to /api/change_password
+     *   2. Calls /api/change_password with old + new passwords + OTP
      *   3. Shows success or error and redirects on success
      *
      * The actual API call to the C binary happens HERE, not earlier.
@@ -504,18 +583,6 @@
             return;
         }
 
-        /* Verify OTP */
-        if (entered !== MOCK_OTP) {
-            showOtpAlert(
-                '<i class="bi bi-x-circle me-1"></i>Incorrect OTP. Try again. (Hint: 0000)',
-                "danger"
-            );
-            document.getElementById("otpInput").value = "";
-            document.getElementById("otpInput").focus();
-            return;
-        }
-
-        /* OTP correct — now call the API */
         const old_pass = document.getElementById("old_password").value;
         const new_pass = document.getElementById("new_password").value;
 
@@ -530,7 +597,8 @@
                 headers: { "Content-Type": "application/json" },
                 body:    JSON.stringify({
                     old_password: old_pass,
-                    new_password: new_pass
+                    new_password: new_pass,
+                    otp: entered
                 })
             });
 
@@ -552,26 +620,32 @@
                     window.location.href = "/logout";
                 }, 2200);
 
-            } else {
-                /* C returned an error (wrong old password, complexity failure, etc.) */
-                otpModal.hide();
-                showMainAlert(
-                    '<i class="bi bi-x-circle me-1"></i>' + result.message,
+            } else if (result.otp_error) {
+                showOtpAlert(
+                    `<i class="bi bi-x-circle me-1"></i>${result.message || "OTP verification failed."}`,
                     "danger"
                 );
-                /* Re-enable old password field so user can try again */
-                document.getElementById("old_password").disabled = false;
-                document.getElementById("step1Btn").classList.remove("d-none");
-                document.getElementById("step2Section").classList.add("d-none");
+                document.getElementById("otpInput").value = "";
+                document.getElementById("otpInput").focus();
                 btn.disabled  = false;
                 btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Verify & Change Password';
+            } else {
+                otpModal.hide();
+                showMainAlert(
+                    '<i class="bi bi-x-circle me-1"></i>' +
+                    (result.message || "Could not change password. Start OTP verification again."),
+                    "danger"
+                );
+                resetPasswordFlowUi();
             }
 
         } catch (err) {
             otpModal.hide();
-            showMainAlert("Server error. Is Flask running?", "danger");
-            btn.disabled  = false;
-            btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Verify & Change Password';
+            showMainAlert(
+                "Could not change password right now. Start OTP verification again.",
+                "danger"
+            );
+            resetPasswordFlowUi();
         }
     }
 </script>
