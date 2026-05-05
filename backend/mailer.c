@@ -1,11 +1,11 @@
 /*
  * Fresh Picks C Mailer
  * --------------------
- * Windows C implementation using CDO COM SMTP. No Python mail sending.
+ * Cross-platform SMTP mailer using libcurl's native SMTP + MIME APIs.
  *
  * Usage:
- *   mailer.exe <recipient_email> <absolute_path_to_pdf>
- *   mailer.exe otp <recipient_email> <otp_code> <register|cancel_order> [reference]
+ *   mailer <recipient_email> <absolute_path_to_attachment>
+ *   mailer otp <recipient_email> <otp_code> <register|cancel_order|password_change> [reference]
  *
  * Config:
  *   Put credentials in backend/mailer.env:
@@ -21,12 +21,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef _WIN32
-#include <windows.h>
-#include <oleauto.h>
-#endif
+#include <curl/curl.h>
 
 #define MAX_CFG_VALUE 512
+#define MAX_URL_VALUE 1024
 
 typedef struct MailConfig {
     char smtp_email[MAX_CFG_VALUE];
@@ -37,33 +35,113 @@ typedef struct MailConfig {
 } MailConfig;
 
 static void trim(char *s) {
-    char *end;
-    while (*s && isspace((unsigned char)*s)) s++;
-    end = s + strlen(s);
-    while (end > s && isspace((unsigned char)*(end - 1))) end--;
-    *end = '\0';
+    size_t start = 0;
+    size_t end;
+    size_t len;
+
+    if (!s) return;
+
+    len = strlen(s);
+    while (start < len && isspace((unsigned char)s[start])) {
+        start++;
+    }
+    if (start > 0) {
+        memmove(s, s + start, len - start + 1);
+    }
+
+    len = strlen(s);
+    end = len;
+    while (end > 0 && isspace((unsigned char)s[end - 1])) {
+        end--;
+    }
+    s[end] = '\0';
 }
 
 static void copy_value(char *dest, size_t dest_size, const char *src) {
+    size_t len;
+
     if (!dest || dest_size == 0) return;
     if (!src) src = "";
-    strncpy(dest, src, dest_size - 1);
-    dest[dest_size - 1] = '\0';
+
+    len = strlen(src);
+    if (len >= dest_size) len = dest_size - 1;
+
+    memmove(dest, src, len);
+    dest[len] = '\0';
 }
 
 static const char *env_first(const char *a, const char *b, const char *c) {
-    const char *value = getenv(a);
-    if (value && value[0]) return value;
-    value = b ? getenv(b) : NULL;
-    if (value && value[0]) return value;
-    value = c ? getenv(c) : NULL;
-    if (value && value[0]) return value;
+    const char *value = NULL;
+
+    if (a) {
+        value = getenv(a);
+        if (value && value[0]) return value;
+    }
+    if (b) {
+        value = getenv(b);
+        if (value && value[0]) return value;
+    }
+    if (c) {
+        value = getenv(c);
+        if (value && value[0]) return value;
+    }
     return NULL;
 }
 
+static int sanitize_header_value(const char *input, char *output, size_t output_size) {
+    size_t i;
+    size_t out_len = 0;
+
+    if (!output || output_size == 0) return 1;
+    output[0] = '\0';
+    if (!input) return 0;
+
+    for (i = 0; input[i] != '\0'; i++) {
+        unsigned char ch = (unsigned char)input[i];
+
+        if (ch == '\r' || ch == '\n') continue;
+        if (ch < 32 && ch != '\t') continue;
+
+        if (out_len + 1 >= output_size) return 1;
+        output[out_len++] = (ch == '\t') ? ' ' : (char)ch;
+    }
+
+    output[out_len] = '\0';
+    trim(output);
+    return 0;
+}
+
+static int is_valid_email(const char *email) {
+    const char *at;
+    const char *p;
+
+    if (!email || !email[0]) return 0;
+
+    at = strchr(email, '@');
+    if (!at || at == email || !at[1] || strchr(at + 1, '@')) return 0;
+
+    for (p = email; *p; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (isspace(ch) || ch < 32) return 0;
+    }
+
+    return strchr(at + 1, '.') != NULL;
+}
+
+static int has_credentials(const MailConfig *cfg) {
+    return cfg &&
+           is_valid_email(cfg->smtp_email) &&
+           cfg->smtp_password[0] &&
+           cfg->smtp_host[0] &&
+           cfg->smtp_port[0] &&
+           strcmp(cfg->smtp_email, "yourgmail@gmail.com") != 0 &&
+           strcmp(cfg->smtp_password, "your16charapppassword") != 0;
+}
+
 static void load_config(MailConfig *cfg) {
-    FILE *fp;
+    FILE *fp = NULL;
     char line[1024];
+    const char *value = NULL;
 
     copy_value(cfg->smtp_email, sizeof(cfg->smtp_email), "");
     copy_value(cfg->smtp_password, sizeof(cfg->smtp_password), "");
@@ -72,492 +150,271 @@ static void load_config(MailConfig *cfg) {
     copy_value(cfg->sender_name, sizeof(cfg->sender_name), "FreshPicks Orders");
 
     fp = fopen("mailer.env", "r");
-    if (!fp) {
-        fp = fopen("backend/mailer.env", "r");
-    }
+    if (!fp) fp = fopen("backend/mailer.env", "r");
+
     if (fp) {
         while (fgets(line, sizeof(line), fp)) {
-            char *equals;
-            char *key;
-            char *value;
+            char *equals = NULL;
+            char *key = NULL;
+            char *field_value = NULL;
 
             if (line[0] == '#') continue;
+
             equals = strchr(line, '=');
             if (!equals) continue;
 
             *equals = '\0';
             key = line;
-            value = equals + 1;
+            field_value = equals + 1;
             trim(key);
-            trim(value);
+            trim(field_value);
 
             if (strcmp(key, "SMTP_EMAIL") == 0) {
-                copy_value(cfg->smtp_email, sizeof(cfg->smtp_email), value);
-            } else if (strcmp(key, "SMTP_APP_PASSWORD") == 0) {
-                copy_value(cfg->smtp_password, sizeof(cfg->smtp_password), value);
+                copy_value(cfg->smtp_email, sizeof(cfg->smtp_email), field_value);
+            } else if (strcmp(key, "SMTP_APP_PASSWORD") == 0 ||
+                       strcmp(key, "SMTP_PASSWORD") == 0) {
+                copy_value(cfg->smtp_password, sizeof(cfg->smtp_password), field_value);
             } else if (strcmp(key, "SMTP_HOST") == 0) {
-                copy_value(cfg->smtp_host, sizeof(cfg->smtp_host), value);
+                copy_value(cfg->smtp_host, sizeof(cfg->smtp_host), field_value);
             } else if (strcmp(key, "SMTP_PORT") == 0) {
-                copy_value(cfg->smtp_port, sizeof(cfg->smtp_port), value);
+                copy_value(cfg->smtp_port, sizeof(cfg->smtp_port), field_value);
             } else if (strcmp(key, "SENDER_NAME") == 0) {
-                copy_value(cfg->sender_name, sizeof(cfg->sender_name), value);
+                copy_value(cfg->sender_name, sizeof(cfg->sender_name), field_value);
             }
         }
         fclose(fp);
     }
 
-    copy_value(cfg->smtp_email, sizeof(cfg->smtp_email),
-               env_first("SMTP_EMAIL", "SMTP_USERNAME", "GMAIL_EMAIL") ?: cfg->smtp_email);
-    copy_value(cfg->smtp_password, sizeof(cfg->smtp_password),
-               env_first("SMTP_APP_PASSWORD", "SMTP_PASSWORD", "GMAIL_APP_PASSWORD") ?: cfg->smtp_password);
+    value = env_first("SMTP_EMAIL", "SMTP_USERNAME", "GMAIL_EMAIL");
+    if (value) copy_value(cfg->smtp_email, sizeof(cfg->smtp_email), value);
+
+    value = env_first("SMTP_APP_PASSWORD", "SMTP_PASSWORD", "GMAIL_APP_PASSWORD");
+    if (value) copy_value(cfg->smtp_password, sizeof(cfg->smtp_password), value);
+
+    value = env_first("SMTP_HOST", "MAILER_SMTP_HOST", NULL);
+    if (value) copy_value(cfg->smtp_host, sizeof(cfg->smtp_host), value);
+
+    value = env_first("SMTP_PORT", "MAILER_SMTP_PORT", NULL);
+    if (value) copy_value(cfg->smtp_port, sizeof(cfg->smtp_port), value);
+
+    value = env_first("SENDER_NAME", "MAILER_SENDER_NAME", NULL);
+    if (value) copy_value(cfg->sender_name, sizeof(cfg->sender_name), value);
 }
 
-static int is_valid_email(const char *email) {
-    return email && email[0] && strchr(email, '@') != NULL;
+static int file_exists(const char *path) {
+    FILE *fp;
+
+    if (!path || !path[0]) return 0;
+    fp = fopen(path, "rb");
+    if (!fp) return 0;
+    fclose(fp);
+    return 1;
 }
 
-static int has_credentials(const MailConfig *cfg) {
-    return is_valid_email(cfg->smtp_email) &&
-           cfg->smtp_password[0] &&
-           strcmp(cfg->smtp_email, "yourgmail@gmail.com") != 0 &&
-           strcmp(cfg->smtp_password, "your16charapppassword") != 0;
-}
+static const char *filename_from_path(const char *path) {
+    const char *slash = NULL;
+    const char *backslash = NULL;
+    const char *name = path;
 
-#ifdef _WIN32
-static void write_base64_file(FILE *out, const char *path) {
-    static const char table[] =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    FILE *in = fopen(path, "rb");
-    unsigned char buf[3];
-    size_t n;
-    int line_len = 0;
+    if (!path || !path[0]) return "attachment.bin";
 
-    if (!in) return;
+    slash = strrchr(path, '/');
+    backslash = strrchr(path, '\\');
 
-    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
-        char encoded[4];
-        encoded[0] = table[buf[0] >> 2];
-        encoded[1] = table[((buf[0] & 0x03) << 4) | (n > 1 ? (buf[1] >> 4) : 0)];
-        encoded[2] = (n > 1) ? table[((buf[1] & 0x0f) << 2) | (n > 2 ? (buf[2] >> 6) : 0)] : '=';
-        encoded[3] = (n > 2) ? table[buf[2] & 0x3f] : '=';
-
-        fwrite(encoded, 1, 4, out);
-        line_len += 4;
-        if (line_len >= 76) {
-            fprintf(out, "\r\n");
-            line_len = 0;
-        }
+    if (slash && backslash) {
+        name = (slash > backslash) ? slash + 1 : backslash + 1;
+    } else if (slash) {
+        name = slash + 1;
+    } else if (backslash) {
+        name = backslash + 1;
     }
-    if (line_len != 0) fprintf(out, "\r\n");
-    fclose(in);
+
+    return (name && name[0]) ? name : "attachment.bin";
 }
 
-static int write_mime_file(const MailConfig *cfg,
-                           const char *recipient,
-                           const char *subject,
-                           const char *body_text,
-                           const char *body_html,
-                           const char *attachment_path,
-                           char *mime_path,
-                           size_t mime_path_size) {
-    char temp_dir[MAX_PATH];
-    FILE *out;
+static const char *mime_type_for_attachment(const char *path) {
+    const char *ext = strrchr(path ? path : "", '.');
 
-    if (!GetTempPathA(sizeof(temp_dir), temp_dir)) {
-        copy_value(temp_dir, sizeof(temp_dir), ".\\");
-    }
-    if (!GetTempFileNameA(temp_dir, "fpm", 0, mime_path)) {
+    if (!ext) return "application/octet-stream";
+
+    if (strcmp(ext, ".pdf") == 0) return "application/pdf";
+    if (strcmp(ext, ".txt") == 0) return "text/plain";
+    if (strcmp(ext, ".csv") == 0) return "text/csv";
+    if (strcmp(ext, ".png") == 0) return "image/png";
+    if (strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0) return "image/jpeg";
+
+    return "application/octet-stream";
+}
+
+static int add_header(struct curl_slist **headers, const char *name, const char *value) {
+    char header_line[1024];
+    struct curl_slist *updated = NULL;
+
+    if (!headers || !name || !value) return 1;
+    if (snprintf(header_line, sizeof(header_line), "%s: %s", name, value) >= (int)sizeof(header_line)) {
         return 1;
     }
-    mime_path[mime_path_size - 1] = '\0';
 
-    out = fopen(mime_path, "wb");
-    if (!out) return 1;
+    updated = curl_slist_append(*headers, header_line);
+    if (!updated) return 1;
 
-    fprintf(out, "From: %s <%s>\r\n", cfg->sender_name, cfg->smtp_email);
-    fprintf(out, "To: %s\r\n", recipient);
-    fprintf(out, "Subject: %s\r\n", subject);
-    fprintf(out, "MIME-Version: 1.0\r\n");
-    fprintf(out, "Content-Type: multipart/mixed; boundary=\"FP_MIXED_BOUNDARY\"\r\n\r\n");
-
-    fprintf(out, "--FP_MIXED_BOUNDARY\r\n");
-    fprintf(out, "Content-Type: multipart/alternative; boundary=\"FP_ALT_BOUNDARY\"\r\n\r\n");
-
-    fprintf(out, "--FP_ALT_BOUNDARY\r\n");
-    fprintf(out, "Content-Type: text/plain; charset=utf-8\r\n");
-    fprintf(out, "Content-Transfer-Encoding: 8bit\r\n\r\n");
-    fprintf(out, "%s\r\n\r\n", body_text);
-
-    fprintf(out, "--FP_ALT_BOUNDARY\r\n");
-    fprintf(out, "Content-Type: text/html; charset=utf-8\r\n");
-    fprintf(out, "Content-Transfer-Encoding: 8bit\r\n\r\n");
-    fprintf(out, "%s\r\n\r\n", body_html);
-    fprintf(out, "--FP_ALT_BOUNDARY--\r\n");
-
-    if (attachment_path && attachment_path[0]) {
-        fprintf(out, "\r\n--FP_MIXED_BOUNDARY\r\n");
-        fprintf(out, "Content-Type: application/pdf; name=\"FreshPicks_Receipt.pdf\"\r\n");
-        fprintf(out, "Content-Transfer-Encoding: base64\r\n");
-        fprintf(out, "Content-Disposition: attachment; filename=\"FreshPicks_Receipt.pdf\"\r\n\r\n");
-        write_base64_file(out, attachment_path);
-    }
-
-    fprintf(out, "\r\n--FP_MIXED_BOUNDARY--\r\n");
-    fclose(out);
+    *headers = updated;
     return 0;
 }
 
-static void append_quoted(char *cmd, size_t cmd_size, const char *value) {
-    strncat(cmd, "\"", cmd_size - strlen(cmd) - 1);
-    while (value && *value && strlen(cmd) + 3 < cmd_size) {
-        if (*value == '"') strncat(cmd, "\\", cmd_size - strlen(cmd) - 1);
-        strncat(cmd, value, 1);
-        value++;
-    }
-    strncat(cmd, "\"", cmd_size - strlen(cmd) - 1);
-}
-
-static int run_curl_smtp(const MailConfig *cfg,
-                         const char *recipient,
-                         const char *mime_path) {
-    char command[4096] = "";
-    char user_pass[1200];
-    char smtp_url[1400];
-    STARTUPINFOA si;
-    PROCESS_INFORMATION pi;
-    DWORD exit_code = 1;
-
-    snprintf(user_pass, sizeof(user_pass), "%s:%s", cfg->smtp_email, cfg->smtp_password);
-    snprintf(smtp_url, sizeof(smtp_url), "smtps://%s:%s", cfg->smtp_host, cfg->smtp_port);
-
-    strncat(command, "curl.exe --silent --show-error --ssl-reqd --url ", sizeof(command) - strlen(command) - 1);
-    append_quoted(command, sizeof(command), smtp_url);
-    strncat(command, " --user ", sizeof(command) - strlen(command) - 1);
-    append_quoted(command, sizeof(command), user_pass);
-    strncat(command, " --mail-from ", sizeof(command) - strlen(command) - 1);
-    append_quoted(command, sizeof(command), cfg->smtp_email);
-    strncat(command, " --mail-rcpt ", sizeof(command) - strlen(command) - 1);
-    append_quoted(command, sizeof(command), recipient);
-    strncat(command, " --upload-file ", sizeof(command) - strlen(command) - 1);
-    append_quoted(command, sizeof(command), mime_path);
-
-    memset(&si, 0, sizeof(si));
-    memset(&pi, 0, sizeof(pi));
-    si.cb = sizeof(si);
-
-    if (!CreateProcessA(NULL, command, NULL, NULL, FALSE, CREATE_NO_WINDOW,
-                        NULL, NULL, &si, &pi)) {
-        printf("ERROR|Could not start curl.exe SMTP sender\n");
-        return 1;
-    }
-
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    GetExitCodeProcess(pi.hProcess, &exit_code);
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
-
-    if (exit_code != 0) {
-        printf("ERROR|curl.exe SMTP send failed with exit code %lu\n", (unsigned long)exit_code);
-        return 1;
-    }
-
-    printf("SUCCESS|Email sent\n");
-    return 0;
-}
-
-static int send_email_curl(const MailConfig *cfg,
+static int send_email_smtp(const MailConfig *cfg,
                            const char *recipient,
                            const char *subject,
                            const char *body_text,
                            const char *body_html,
                            const char *attachment_path) {
-    char mime_path[MAX_PATH];
-    int rc;
-
-    if (write_mime_file(cfg, recipient, subject, body_text, body_html,
-                        attachment_path, mime_path, sizeof(mime_path))) {
-        printf("ERROR|Could not create MIME email file\n");
-        return 1;
-    }
-
-    rc = run_curl_smtp(cfg, recipient, mime_path);
-    DeleteFileA(mime_path);
-    return rc;
-}
-
-#if 0
-static BSTR bstr_from_utf8(const char *text) {
-    int wide_len;
-    BSTR bstr;
-    if (!text) text = "";
-    wide_len = MultiByteToWideChar(CP_UTF8, 0, text, -1, NULL, 0);
-    bstr = SysAllocStringLen(NULL, wide_len > 0 ? wide_len - 1 : 0);
-    if (bstr && wide_len > 0) {
-        MultiByteToWideChar(CP_UTF8, 0, text, -1, bstr, wide_len);
-    }
-    return bstr;
-}
-
-static void utf8_from_bstr(BSTR bstr, char *dest, size_t dest_size) {
-    int len;
-    if (!dest || dest_size == 0) return;
-    dest[0] = '\0';
-    if (!bstr) return;
-    len = WideCharToMultiByte(CP_UTF8, 0, bstr, -1, dest, (int)dest_size, NULL, NULL);
-    if (len <= 0) dest[0] = '\0';
-    dest[dest_size - 1] = '\0';
-}
-
-static HRESULT get_dispid(IDispatch *obj, const wchar_t *name, DISPID *id) {
-    LPOLESTR names[1];
-    names[0] = (LPOLESTR)name;
-    return obj->lpVtbl->GetIDsOfNames(obj, &IID_NULL, names, 1,
-                                      LOCALE_USER_DEFAULT, id);
-}
-
-static HRESULT dispatch_call(IDispatch *obj, const wchar_t *name, WORD flags,
-                             VARIANT *args, UINT arg_count, VARIANT *result) {
-    DISPID id;
-    DISPPARAMS params;
-    EXCEPINFO excep;
-    HRESULT hr;
-
-    hr = get_dispid(obj, name, &id);
-    if (FAILED(hr)) return hr;
-
-    memset(&params, 0, sizeof(params));
-    params.rgvarg = args;
-    params.cArgs = arg_count;
-
-    VariantInit(result);
-    memset(&excep, 0, sizeof(excep));
-    hr = obj->lpVtbl->Invoke(obj, id, &IID_NULL, LOCALE_USER_DEFAULT,
-                             flags, &params, result, &excep, NULL);
-    if (hr == DISP_E_EXCEPTION) {
-        char source[256];
-        char description[768];
-        utf8_from_bstr(excep.bstrSource, source, sizeof(source));
-        utf8_from_bstr(excep.bstrDescription, description, sizeof(description));
-        snprintf(LAST_COM_ERROR, sizeof(LAST_COM_ERROR), "%s%s%s",
-                 source,
-                 source[0] && description[0] ? ": " : "",
-                 description);
-    }
-    SysFreeString(excep.bstrSource);
-    SysFreeString(excep.bstrDescription);
-    SysFreeString(excep.bstrHelpFile);
-    return hr;
-}
-
-static HRESULT prop_put(IDispatch *obj, const wchar_t *name, VARIANT *value) {
-    DISPID id;
-    DISPID named = DISPID_PROPERTYPUT;
-    DISPPARAMS params;
-    HRESULT hr;
-
-    hr = get_dispid(obj, name, &id);
-    if (FAILED(hr)) return hr;
-
-    memset(&params, 0, sizeof(params));
-    params.rgvarg = value;
-    params.cArgs = 1;
-    params.rgdispidNamedArgs = &named;
-    params.cNamedArgs = 1;
-
-    return obj->lpVtbl->Invoke(obj, id, &IID_NULL, LOCALE_USER_DEFAULT,
-                               DISPATCH_PROPERTYPUT, &params, NULL, NULL, NULL);
-}
-
-static HRESULT prop_get_dispatch(IDispatch *obj, const wchar_t *name, IDispatch **out) {
-    VARIANT result;
-    HRESULT hr = dispatch_call(obj, name, DISPATCH_PROPERTYGET, NULL, 0, &result);
-    if (FAILED(hr)) return hr;
-    if (result.vt != VT_DISPATCH || !result.pdispVal) {
-        VariantClear(&result);
-        return E_FAIL;
-    }
-    *out = result.pdispVal;
-    return S_OK;
-}
-
-static HRESULT fields_set(IDispatch *fields, const char *key, VARIANT *value) {
-    VARIANT args[1];
-    VARIANT item;
-    IDispatch *field = NULL;
-    HRESULT hr;
-
-    VariantInit(&args[0]);
-    args[0].vt = VT_BSTR;
-    args[0].bstrVal = bstr_from_utf8(key);
-
-    hr = dispatch_call(fields, L"Item", DISPATCH_PROPERTYGET, args, 1, &item);
-    VariantClear(&args[0]);
-    if (FAILED(hr)) return hr;
-    if (item.vt != VT_DISPATCH || !item.pdispVal) {
-        VariantClear(&item);
-        return E_FAIL;
-    }
-
-    field = item.pdispVal;
-    hr = prop_put(field, L"Value", value);
-    field->lpVtbl->Release(field);
-    return hr;
-}
-
-static void variant_bstr(VARIANT *v, const char *value) {
-    VariantInit(v);
-    v->vt = VT_BSTR;
-    v->bstrVal = bstr_from_utf8(value);
-}
-
-static void variant_i4(VARIANT *v, long value) {
-    VariantInit(v);
-    v->vt = VT_I4;
-    v->lVal = value;
-}
-
-static void variant_bool(VARIANT *v, int value) {
-    VariantInit(v);
-    v->vt = VT_BOOL;
-    v->boolVal = value ? VARIANT_TRUE : VARIANT_FALSE;
-}
-
-static int send_email_cdo(const MailConfig *cfg,
-                          const char *recipient,
-                          const char *subject,
-                          const char *body_text,
-                          const char *body_html,
-                          const char *attachment_path) {
-    CLSID clsid;
-    IDispatch *message = NULL;
-    IDispatch *config = NULL;
-    IDispatch *fields = NULL;
-    VARIANT v;
-    HRESULT hr;
+    CURL *curl = NULL;
+    CURLcode code = CURLE_OK;
+    CURLcode init_code = CURLE_OK;
+    curl_mime *mime = NULL;
+    curl_mime *alternative = NULL;
+    curl_mimepart *part = NULL;
+    struct curl_slist *headers = NULL;
+    struct curl_slist *recipients = NULL;
+    char url[MAX_URL_VALUE];
+    char safe_subject[MAX_CFG_VALUE];
+    char safe_sender_name[MAX_CFG_VALUE];
     char from_header[1024];
+    char error_buffer[CURL_ERROR_SIZE];
+    int rc = 1;
 
-    hr = CoInitialize(NULL);
-    if (FAILED(hr)) {
-        printf("ERROR|COM initialization failed\n");
+    if (!is_valid_email(recipient)) {
+        printf("ERROR|Invalid recipient email address\n");
+        return 1;
+    }
+    if (attachment_path && attachment_path[0] && !file_exists(attachment_path)) {
+        printf("ERROR|Attachment file not found\n");
+        return 1;
+    }
+    if (sanitize_header_value(subject, safe_subject, sizeof(safe_subject)) || !safe_subject[0]) {
+        printf("ERROR|Invalid email subject\n");
+        return 1;
+    }
+    if (sanitize_header_value(cfg->sender_name, safe_sender_name, sizeof(safe_sender_name)) ||
+        !safe_sender_name[0]) {
+        copy_value(safe_sender_name, sizeof(safe_sender_name), "FreshPicks Orders");
+    }
+    if (snprintf(from_header, sizeof(from_header), "%s <%s>", safe_sender_name, cfg->smtp_email) >=
+        (int)sizeof(from_header)) {
+        printf("ERROR|Sender header is too long\n");
         return 1;
     }
 
-    hr = CLSIDFromProgID(L"CDO.Message", &clsid);
-    if (SUCCEEDED(hr)) {
-        hr = CoCreateInstance(&clsid, NULL, CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER,
-                              &IID_IDispatch, (void **)&message);
-    }
-    if (FAILED(hr) || !message) {
-        CoUninitialize();
-        printf("ERROR|CDO.Message is not available on this Windows installation\n");
+    if (snprintf(url, sizeof(url), "%s://%s:%s",
+                 strcmp(cfg->smtp_port, "465") == 0 ? "smtps" : "smtp",
+                 cfg->smtp_host, cfg->smtp_port) >= (int)sizeof(url)) {
+        printf("ERROR|SMTP URL is too long\n");
         return 1;
     }
 
-    hr = prop_get_dispatch(message, L"Configuration", &config);
-    if (SUCCEEDED(hr)) hr = prop_get_dispatch(config, L"Fields", &fields);
-
-    if (SUCCEEDED(hr)) {
-        variant_i4(&v, 2);
-        hr = fields_set(fields, "http://schemas.microsoft.com/cdo/configuration/sendusing", &v);
-        VariantClear(&v);
-    }
-    if (SUCCEEDED(hr)) {
-        variant_bstr(&v, cfg->smtp_host);
-        hr = fields_set(fields, "http://schemas.microsoft.com/cdo/configuration/smtpserver", &v);
-        VariantClear(&v);
-    }
-    if (SUCCEEDED(hr)) {
-        variant_i4(&v, atol(cfg->smtp_port));
-        hr = fields_set(fields, "http://schemas.microsoft.com/cdo/configuration/smtpserverport", &v);
-        VariantClear(&v);
-    }
-    if (SUCCEEDED(hr)) {
-        variant_i4(&v, 1);
-        hr = fields_set(fields, "http://schemas.microsoft.com/cdo/configuration/smtpauthenticate", &v);
-        VariantClear(&v);
-    }
-    if (SUCCEEDED(hr)) {
-        variant_bstr(&v, cfg->smtp_email);
-        hr = fields_set(fields, "http://schemas.microsoft.com/cdo/configuration/sendusername", &v);
-        VariantClear(&v);
-    }
-    if (SUCCEEDED(hr)) {
-        variant_bstr(&v, cfg->smtp_password);
-        hr = fields_set(fields, "http://schemas.microsoft.com/cdo/configuration/sendpassword", &v);
-        VariantClear(&v);
-    }
-    if (SUCCEEDED(hr)) {
-        variant_bool(&v, 1);
-        hr = fields_set(fields, "http://schemas.microsoft.com/cdo/configuration/smtpusessl", &v);
-        VariantClear(&v);
-    }
-    if (SUCCEEDED(hr)) {
-        VARIANT result;
-        hr = dispatch_call(fields, L"Update", DISPATCH_METHOD, NULL, 0, &result);
-        VariantClear(&result);
+    init_code = curl_global_init(CURL_GLOBAL_DEFAULT);
+    if (init_code != CURLE_OK) {
+        printf("ERROR|libcurl initialization failed: %s\n", curl_easy_strerror(init_code));
+        return 1;
     }
 
-    snprintf(from_header, sizeof(from_header), "%s <%s>",
-             cfg->sender_name, cfg->smtp_email);
-
-    if (SUCCEEDED(hr)) {
-        variant_bstr(&v, from_header);
-        hr = prop_put(message, L"From", &v);
-        VariantClear(&v);
-    }
-    if (SUCCEEDED(hr)) {
-        variant_bstr(&v, recipient);
-        hr = prop_put(message, L"To", &v);
-        VariantClear(&v);
-    }
-    if (SUCCEEDED(hr)) {
-        variant_bstr(&v, subject);
-        hr = prop_put(message, L"Subject", &v);
-        VariantClear(&v);
-    }
-    if (SUCCEEDED(hr)) {
-        variant_bstr(&v, body_text);
-        hr = prop_put(message, L"TextBody", &v);
-        VariantClear(&v);
-    }
-    if (SUCCEEDED(hr)) {
-        variant_bstr(&v, body_html);
-        hr = prop_put(message, L"HTMLBody", &v);
-        VariantClear(&v);
-    }
-    if (SUCCEEDED(hr) && attachment_path && attachment_path[0]) {
-        VARIANT args[1];
-        VARIANT result;
-        variant_bstr(&args[0], attachment_path);
-        hr = dispatch_call(message, L"AddAttachment", DISPATCH_METHOD, args, 1, &result);
-        VariantClear(&args[0]);
-        VariantClear(&result);
-    }
-    if (SUCCEEDED(hr)) {
-        VARIANT result;
-        hr = dispatch_call(message, L"Send", DISPATCH_METHOD, NULL, 0, &result);
-        VariantClear(&result);
+    curl = curl_easy_init();
+    if (!curl) {
+        printf("ERROR|Could not initialize libcurl mailer\n");
+        goto cleanup;
     }
 
-    if (fields) fields->lpVtbl->Release(fields);
-    if (config) config->lpVtbl->Release(config);
-    if (message) message->lpVtbl->Release(message);
-    CoUninitialize();
+    error_buffer[0] = '\0';
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_USERNAME, cfg->smtp_email);
+    curl_easy_setopt(curl, CURLOPT_PASSWORD, cfg->smtp_password);
+    curl_easy_setopt(curl, CURLOPT_USE_SSL, (long)CURLUSESSL_ALL);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(curl, CURLOPT_SSLVERSION, (long)CURL_SSLVERSION_TLSv1_2);
+    curl_easy_setopt(curl, CURLOPT_MAIL_FROM, cfg->smtp_email);
 
-    if (FAILED(hr)) {
-        if (LAST_COM_ERROR[0]) {
-            printf("ERROR|CDO SMTP send failed: %s\n", LAST_COM_ERROR);
-        } else {
-            printf("ERROR|CDO SMTP send failed: 0x%08lx\n", (unsigned long)hr);
+    recipients = curl_slist_append(NULL, recipient);
+    if (!recipients) {
+        printf("ERROR|Could not allocate SMTP recipient list\n");
+        goto cleanup;
+    }
+    curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
+
+    if (add_header(&headers, "To", recipient) ||
+        add_header(&headers, "From", from_header) ||
+        add_header(&headers, "Subject", safe_subject)) {
+        printf("ERROR|Could not allocate email headers\n");
+        goto cleanup;
+    }
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+    mime = curl_mime_init(curl);
+    alternative = curl_mime_init(curl);
+    if (!mime || !alternative) {
+        printf("ERROR|Could not build MIME message\n");
+        goto cleanup;
+    }
+
+    part = curl_mime_addpart(alternative);
+    if (!part ||
+        curl_mime_data(part, body_text ? body_text : "", CURL_ZERO_TERMINATED) != CURLE_OK ||
+        curl_mime_type(part, "text/plain; charset=utf-8") != CURLE_OK) {
+        printf("ERROR|Could not create plain-text email body\n");
+        goto cleanup;
+    }
+
+    part = curl_mime_addpart(alternative);
+    if (!part ||
+        curl_mime_data(part, body_html ? body_html : "", CURL_ZERO_TERMINATED) != CURLE_OK ||
+        curl_mime_type(part, "text/html; charset=utf-8") != CURLE_OK) {
+        printf("ERROR|Could not create HTML email body\n");
+        goto cleanup;
+    }
+
+    part = curl_mime_addpart(mime);
+    if (!part ||
+        curl_mime_subparts(part, alternative) != CURLE_OK ||
+        curl_mime_type(part, "multipart/alternative") != CURLE_OK) {
+        printf("ERROR|Could not create email alternative body\n");
+        goto cleanup;
+    }
+    alternative = NULL;
+
+    if (attachment_path && attachment_path[0]) {
+        part = curl_mime_addpart(mime);
+        if (!part ||
+            curl_mime_filedata(part, attachment_path) != CURLE_OK ||
+            curl_mime_filename(part, filename_from_path(attachment_path)) != CURLE_OK ||
+            curl_mime_type(part, mime_type_for_attachment(attachment_path)) != CURLE_OK ||
+            curl_mime_encoder(part, "base64") != CURLE_OK) {
+            printf("ERROR|Could not attach the requested file\n");
+            goto cleanup;
         }
-        return 1;
+    }
+
+    curl_easy_setopt(curl, CURLOPT_MIMEPOST, mime);
+
+    code = curl_easy_perform(curl);
+    if (code != CURLE_OK) {
+        printf("ERROR|SMTP send failed: %s\n",
+               error_buffer[0] ? error_buffer : curl_easy_strerror(code));
+        goto cleanup;
     }
 
     printf("SUCCESS|Email sent\n");
-    return 0;
+    rc = 0;
+
+cleanup:
+    if (mime) curl_mime_free(mime);
+    if (alternative) curl_mime_free(alternative);
+    if (headers) curl_slist_free_all(headers);
+    if (recipients) curl_slist_free_all(recipients);
+    if (curl) curl_easy_cleanup(curl);
+    curl_global_cleanup();
+    return rc;
 }
-#endif
-#endif
 
 static int build_otp_email(const char *purpose,
                            const char *otp_code,
@@ -568,7 +425,16 @@ static int build_otp_email(const char *purpose,
                            size_t body_text_size,
                            char *body_html,
                            size_t body_html_size) {
-    const char *safe_reference = reference && reference[0] ? reference : "your order";
+    char safe_reference[128];
+    const char *display_reference = NULL;
+
+    safe_reference[0] = '\0';
+    if (reference && reference[0]) {
+        if (sanitize_header_value(reference, safe_reference, sizeof(safe_reference))) {
+            return 1;
+        }
+    }
+    display_reference = safe_reference[0] ? safe_reference : "your order";
 
     if (strcmp(purpose, "register") == 0) {
         snprintf(subject, subject_size, "FreshPicks Registration OTP");
@@ -596,14 +462,14 @@ static int build_otp_email(const char *purpose,
     }
 
     if (strcmp(purpose, "cancel_order") == 0) {
-        snprintf(subject, subject_size, "FreshPicks Cancellation OTP - %s", safe_reference);
+        snprintf(subject, subject_size, "FreshPicks Cancellation OTP - %s", display_reference);
         snprintf(body_text, body_text_size,
                  "Dear Customer,\r\n\r\n"
                  "We received a request to cancel order %s.\r\n\r\n"
                  "Your cancellation OTP is: %s\r\n\r\n"
                  "This OTP is valid for 10 minutes.\r\n\r\n"
                  "Regards,\r\nFreshPicks\r\n",
-                 safe_reference, otp_code);
+                 display_reference, otp_code);
         snprintf(body_html, body_html_size,
                  "<html><body style=\"font-family:Arial,sans-serif;color:#333;\">"
                  "<p>Dear Customer,</p>"
@@ -615,7 +481,33 @@ static int build_otp_email(const char *purpose,
                  "<p>This OTP is valid for <strong>10 minutes</strong>.</p>"
                  "<p>Regards,<br><strong>FreshPicks</strong></p>"
                  "</body></html>",
-                 safe_reference, otp_code);
+                 display_reference, otp_code);
+        return 0;
+    }
+
+    if (strcmp(purpose, "password_change") == 0) {
+        snprintf(subject, subject_size, "FreshPicks Password Change OTP");
+        snprintf(body_text, body_text_size,
+                 "Dear Customer,\r\n\r\n"
+                 "We received a request to change your FreshPicks account password.\r\n\r\n"
+                 "Your password-change OTP is: %s\r\n\r\n"
+                 "This OTP is valid for 10 minutes.\r\n"
+                 "If you did not request this change, please ignore this email.\r\n\r\n"
+                 "Regards,\r\nFreshPicks\r\n",
+                 otp_code);
+        snprintf(body_html, body_html_size,
+                 "<html><body style=\"font-family:Arial,sans-serif;color:#333;\">"
+                 "<p>Dear Customer,</p>"
+                 "<p>We received a request to change your <strong>FreshPicks</strong> account password.</p>"
+                 "<p>Your password-change OTP is:</p>"
+                 "<div style=\"display:inline-block;padding:12px 18px;border-radius:8px;"
+                 "background:#f7f2ff;border:1px solid #d7c4ff;font-size:28px;"
+                 "letter-spacing:0.25em;font-weight:700;color:#7b4dff;\">%s</div>"
+                 "<p>This OTP is valid for <strong>10 minutes</strong>.</p>"
+                 "<p>If you did not request this change, you can safely ignore this email.</p>"
+                 "<p>Regards,<br><strong>FreshPicks</strong></p>"
+                 "</body></html>",
+                 otp_code);
         return 0;
     }
 
@@ -643,20 +535,20 @@ int main(int argc, char *argv[]) {
         recipient = argv[1];
         attachment = argv[2];
         if (!is_valid_email(recipient) || !attachment[0]) {
-            printf("ERROR|Usage: mailer <recipient_email> <absolute_pdf_path>\n");
+            printf("ERROR|Usage: mailer <recipient_email> <absolute_attachment_path>\n");
             return 1;
         }
         subject = "FreshPicks Order Confirmed - Receipt Attached";
         body_text =
             "Dear Customer,\r\n\r\n"
             "Thank you for shopping with FreshPicks.\r\n\r\n"
-            "Please find your order receipt attached as a PDF document.\r\n\r\n"
+            "Please find your order receipt attached.\r\n\r\n"
             "Happy shopping,\r\nFreshPicks\r\n";
         body_html =
             "<html><body style=\"font-family:Arial,sans-serif;color:#333;\">"
             "<p>Dear Customer,</p>"
             "<p>Thank you for shopping with <strong>FreshPicks</strong>.</p>"
-            "<p>Please find your order receipt attached as a PDF document.</p>"
+            "<p>Please find your order receipt attached.</p>"
             "<p>Happy shopping,<br><strong>FreshPicks</strong></p>"
             "</body></html>";
     } else if (argc >= 5 && strcmp(argv[1], "otp") == 0) {
@@ -666,21 +558,16 @@ int main(int argc, char *argv[]) {
                             otp_subject, sizeof(otp_subject),
                             otp_text, sizeof(otp_text),
                             otp_html, sizeof(otp_html))) {
-            printf("ERROR|Usage: mailer otp <recipient_email> <otp_code> <register|cancel_order> [reference]\n");
+            printf("ERROR|Usage: mailer otp <recipient_email> <otp_code> <register|cancel_order|password_change> [reference]\n");
             return 1;
         }
         subject = otp_subject;
         body_text = otp_text;
         body_html = otp_html;
     } else {
-        printf("ERROR|Usage: mailer <recipient_email> <absolute_pdf_path> OR mailer otp <recipient_email> <otp_code> <register|cancel_order> [reference]\n");
+        printf("ERROR|Usage: mailer <recipient_email> <absolute_attachment_path> OR mailer otp <recipient_email> <otp_code> <register|cancel_order|password_change> [reference]\n");
         return 1;
     }
 
-#ifdef _WIN32
-    return send_email_curl(&cfg, recipient, subject, body_text, body_html, attachment);
-#else
-    printf("ERROR|This C mailer build currently supports Windows only\n");
-    return 1;
-#endif
+    return send_email_smtp(&cfg, recipient, subject, body_text, body_html, attachment);
 }

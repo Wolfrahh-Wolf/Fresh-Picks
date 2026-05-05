@@ -10,6 +10,7 @@
  *   login_admin      <username> <password>
  *   register         <username> <password> <full_name> <email> <phone> <address>
  *   get_profile      <user_id>
+ *   get_admin_profile<admin_id>
  *   change_pass_user <user_id> <old_password> <new_password>
  *   change_pass_admin<admin_id> <old_password> <new_password>
  *   update_profile   <user_id> <field> <new_value>
@@ -56,9 +57,10 @@ void cmd_login_admin(const char *username, const char *password,
         if (!admin_table[i]) continue;
         if (strcmp(admin_table[i]->data.username, username) == 0 &&
             strcmp(admin_table[i]->data.password, password) == 0) {
-            printf("SUCCESS|%s|%s\n",
+            printf("SUCCESS|%s|%s|%s\n",
                    admin_table[i]->data.admin_id,
-                   admin_table[i]->data.admin_name);
+                   admin_table[i]->data.admin_name,
+                   admin_table[i]->data.email);
             return;
         }
     }
@@ -157,6 +159,27 @@ void cmd_get_profile(const char *user_id,
            match->data.email,
            match->data.phone,
            match->data.address);
+}
+
+
+/* cmd_get_admin_profile — O(1) lookup by admin_id via admin_table */
+void cmd_get_admin_profile(const char *admin_id,
+                           AdminNode **admin_table) {
+    if (!admin_id || strlen(admin_id) == 0) { PRINT_ERROR("Admin ID required");      return; }
+    if (!admin_table)                        { PRINT_ERROR("Admin database not found"); return; }
+
+    int idx = get_index_from_id(admin_id);
+    if (idx < 0 || idx >= ADMIN_TABLE_SIZE || !admin_table[idx]) {
+        PRINT_ERROR("Admin not found");
+        return;
+    }
+
+    AdminNode *match = admin_table[idx];
+    printf("SUCCESS|%s|%s|%s|%s\n",
+           match->data.admin_id,
+           match->data.username,
+           match->data.admin_name,
+           match->data.email);
 }
 
 
@@ -300,6 +323,10 @@ int main(int argc, char *argv[]) {
     } else if (strcmp(action, "get_profile") == 0) {
         if (argc < 3) { PRINT_ERROR("Usage: get_profile <user_id>"); goto cleanup; }
         cmd_get_profile(argv[2], user_table, user_table_size);
+
+    } else if (strcmp(action, "get_admin_profile") == 0) {
+        if (argc < 3) { PRINT_ERROR("Usage: get_admin_profile <admin_id>"); goto cleanup; }
+        cmd_get_admin_profile(argv[2], admin_table);
 
     } else if (strcmp(action, "change_pass_user") == 0) {
         if (argc < 5) { PRINT_ERROR("Usage: change_pass_user <user_id> <old_pass> <new_pass>"); goto cleanup; }

@@ -210,12 +210,12 @@
 
                 <!-- OTP Input -->
                 <label for="otpInput" class="form-label">
-                    <i class="bi bi-key me-1"></i>Enter the 4-digit OTP
+                    <i class="bi bi-key me-1"></i>Enter the 4-Digit OTP
                 </label>
                 <input type="text"
                        class="form-control otp-field"
                        id="otpInput"
-                       placeholder="0000"
+                       placeholder="0 0 0 0 "
                        maxlength="4">
 
             </div>
@@ -447,7 +447,7 @@
 
     /*
      * FUNCTION: handleOtpVerify
-     * PURPOSE:  Check the typed OTP against the mock "0000".
+     * PURPOSE:  Verify the typed OTP with the server.
      *           On success: close modal and redirect to login.
      *           On failure: show error inside the modal.
      */
@@ -473,6 +473,18 @@
             const result = await response.json();
 
             if (result.status !== "SUCCESS") {
+                if (result.restart_required) {
+                    otpModal.hide();
+                    showAlert(
+                        `<i class="bi bi-x-circle me-1"></i>${result.message || "Registration failed. Please try again."}`,
+                        "danger"
+                    );
+                    const registerBtn = document.getElementById("registerBtn");
+                    registerBtn.disabled  = false;
+                    registerBtn.innerHTML = '<i class="bi bi-send me-2"></i>Register';
+                    return;
+                }
+
                 showOtpAlert(
                     `<i class="bi bi-x-circle me-1"></i>${result.message || "OTP verification failed."}`,
                     "danger"
