@@ -1,28 +1,5 @@
 /*
- * models.h - Fresh Picks: GLOBAL Source of Truth (v4 — Binary Storage Edition)
- * ==============================================================================
- * This header is the SINGLE file every .c file must include.
- * It defines:
- *   1. Constants (string lengths, file paths, max sizes)
- *   2. ALL entity structs (User, Vegetable, Order, FreeItem, DeliveryBoy, AdminCreds)
- *   3. SLL Node structs for each entity (used by utils.c for binary I/O)
- *   4. Pre-existing DS structs (CartNode, QueueNode, DeliveryNode, MinHeap)
- *   5. Function prototypes for utils.c (formerly ds_utils.c)
- *
- *
- * ID FORMAT STANDARD 
- *   Every ID has a PREFIX followed by exactly 4 digits.
- *     Users        → U1001, U1002, ...
- *     Admins       → A1001, A1002, ...
- *     Vegetables   → V1001, V1002, ...
- *     Free Items   → VF1001, VF1002, ...
- *     Orders       → ORD1001, ORD1002, ...
- *     Delivery Boys→ D1001, D1002, ...
- *
- * HOW TO USE: Add this line at the top of every .c file:
- *   #include "models.h"
- *
- * Team: CodeCrafters | Project: Fresh Picks | SDP-1
+ * models.h - Fresh Picks: GLOBAL Source of Truth
  */
 
 

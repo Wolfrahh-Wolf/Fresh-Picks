@@ -1,37 +1,12 @@
 """
 bridge.py - Fresh Picks: Python-to-C Communication Bridge
-==========================================================
-This module provides ONE reusable function  to call C binaries.
-
-HOW IT WORKS:
-    1. Flask route calls run_c_binary("auth", ["login_user", "User", "User@123"])
-    2. This function builds the shell command: ./auth login_user User User@123
-    3. subprocess.run() executes the C binary
-    4. The C binary prints to stdout: SUCCESS|U001
-    5. We parse this and return a clean Python dict: {"status": "SUCCESS", "data": "U001"}
-
-USAGE EXAMPLE (in app.py):
-    from bridge import run_c_binary
-
-    result = run_c_binary("auth", ["login_user", username, password])
-    if result["status"] == "SUCCESS":
-        user_id = result["data"]
-
-Team: CodeCrafters | Project: Fresh Picks | SDP-1
 """
 
-import os          # Used to build the correct file path
-import subprocess  # Used to run external programs (our C binaries)
+import os          
+import subprocess  
 
 
-# ─────────────────────────────────────────────────────────────
-# CONSTANT: Path to the backend folder where C binaries live.
-# os.path.dirname(__file__) gets the folder of THIS file (app/).
-# We then go up one level (..) and into backend/.
-# os.path.dirname(__file__) → /home/user/project/app
-# os.path.join("/home/user/project/app", "..", "backend")
-#             → /home/user/project/backend 
-# ─────────────────────────────────────────────────────────────
+# Backend File Path
 BACKEND_DIR = os.path.join(os.path.dirname(__file__), "..", "backend")
 
 
@@ -65,8 +40,6 @@ def run_c_binary(executable_name, args_list):
     """
 
     # Step 1: Build the full path to the binary.
-    # On Windows, prefer .exe because extensionless MSYS builds are not
-    # valid Win32 executables when launched by Python subprocess.
     binary_path = os.path.join(BACKEND_DIR, executable_name)
     if os.name == "nt":
         exe_path = binary_path + ".exe"
@@ -89,6 +62,7 @@ def run_c_binary(executable_name, args_list):
         # cwd=BACKEND_DIR      -> to run C binary INSIDE the backend folder
         timeout_seconds = 60 if executable_name == "mailer" else 10
 
+        # C File Calling Function
         result = subprocess.run(
             command,
             capture_output=True,

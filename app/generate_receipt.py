@@ -1,46 +1,5 @@
 """
 generate_receipt.py — Fresh Picks: Server-Side PDF Receipt Engine
-=================================================================
-INSTALL:  pip install fpdf2 Pillow
-CALL:     generate_receipt(data, output_path)
-
-FONTS (static/fonts/):
-    DejaVuSans.ttf        — regular (covers BMP: ✉ ☎ ✓)
-    DejaVuSans-Bold.ttf   — bold
-
-EMOJI ICONS
-    Four of the five needed emoji (🧺 📞 🛵 🎁) are above Unicode's
-    Basic Multilingual Plane (U+1F000+).  DejaVuSans only covers the BMP
-    so those four CANNOT be rendered as text — ever — with that font.
-
-    Solution: tiny 32×32 px PNG icons saved to static/icons/.
-    generate_receipt.py embeds them with pdf.image() at ~4–5 mm.
-    Two BMP characters that DejaVuSans DOES support are used as text:
-        ✉  U+2709  — envelope  (before email)
-        ☎  U+260E  — telephone (before phone in contact)
-
-    Required icon files (32×32 px transparent PNG, RGBA):
-        static/icons/icon_basket.png   → 🧺  brand name
-        static/icons/icon_phone.png    → 📞  delivery-boy phone row
-        static/icons/icon_scooter.png  → 🛵  delivery partner box
-        static/icons/icon_gift.png     → 🎁  FREE badge
-
-    HOW TO CREATE THEM (one-time setup):
-        Run:  python generate_receipt.py --make-icons
-        This script auto-generates simple coloured placeholder PNGs
-        using Pillow so the PDF works immediately even without real
-        emoji images.  Replace with real PNG exports from any emoji
-        source (e.g. Twemoji, Noto Emoji) for production quality.
-
-DATA DICT:
-    order_id, full_name, user_phone, user_email,
-    address ("line1,line2,line3,postcode"),
-    slot, status, timestamp ("YYYY-MM-DD HH:MM:SS"),
-    boy_name, boy_phone, total (float), items_string
-
-ITEMS_STRING: veg_id:name:qty_g:price_per_1000g (comma-separated)
-
-Team: CodeCrafters | Project: Fresh Picks | SDP-1
 """
 
 import os

@@ -10,16 +10,6 @@ Downloads and prepares all six icons needed by generate_receipt.py.
         icon_phone.png           📞 Twemoji 1f4de   (delivery boy phone)
         icon_scooter.png         🛵 Twemoji 1f6f5   (delivery partner box)
         icon_gift.png            🎁 Twemoji 1f381   (FREE badge)
-
-REQUIREMENTS  (all pip-installable, no system tools needed):
-    pip install svglib reportlab Pillow
-
-RUN ONCE:
-    python download_icons.py
-
-SOURCES:
-    Bootstrap Icons  MIT licence   github.com/twbs/icons
-    Twemoji          CC BY 4.0     github.com/twitter/twemoji
 """
 
 import os

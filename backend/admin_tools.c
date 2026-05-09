@@ -1,39 +1,5 @@
 /*
- * admin_tools.c - Fresh Picks: Admin Terminal Utility (v4 — Binary Storage)
- * ==========================================================================
- * Standalone maintenance tool. NOT called by Flask.
- * Run directly from the terminal by a developer or system admin to
- * manually add Admin accounts and Delivery Boys to the binary .dat files.
- *
- * COMPILE:
- *   gcc -o admin_tools admin_tools.c utils.c
- *
- * USAGE:
- *   ./admin_tools          (launches the interactive menu)
- *
- * MENU:
- *   [1] Add Admin
- *   [2] Add Delivery Boy
- *   [3] Exit
- *
- * ARCHITECTURE:
- *   All data I/O is delegated to utils.c via load_*_sll() / save_*_sll()
- *   / free_*_sll() — Rule 1 of the v4 architecture is fully respected.
- *   This file never calls fopen(), fclose(), fread(), or fwrite() directly.
- *
- * LAST_ASSIGNED INVARIANT (Round-Robin CLL Safety):
- *   When a new Delivery Boy is added:
- *     - Every EXISTING boy's last_assigned is reset to 0.
- *     - The NEW boy's last_assigned is set to 1.
- *   Effect: the CLL in utils.c will treat the new boy as the last one
- *   served, so the NEXT order assignment starts from boy #1 again —
- *   giving all boys (including the new one) a fair rotation.
- *
- * ID SCHEME (v4 standard — Rule 7):
- *   Admins        → A1001, A1002, ...   (1001 + count)
- *   Delivery Boys → D1001, D1002, ...   (1001 + count)
- *
- * Team: CodeCrafters | Project: Fresh Picks | SDP-1
+ * admin_tools.c - Fresh Picks: Admin Terminal Utility
  */
 
 #include <stdio.h>
@@ -46,15 +12,9 @@
    SECTION 1: INPUT HELPERS
    ═════════════════════════════════════════════════════════════ */
 
-/*
- * FUNCTION: flush_stdin
- * PURPOSE:  Discard any leftover characters in the stdin buffer
- *           (including the trailing newline left by scanf/fgets).
- *           Must be called before every fgets() to avoid phantom reads.
- * PARAMS:   (none)
- * OUTPUT:   (none)
- * SCHEMA:   (none)
- */
+// Discard any leftover characters in the stdin buffer
+// (including the trailing newline left by scanf/fgets). 
+// Must be called before every fgets() to avoid phantom reads.
 static void flush_stdin(void) {
     int c;
     while ((c = getchar()) != '\n' && c != EOF);

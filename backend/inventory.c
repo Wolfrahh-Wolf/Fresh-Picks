@@ -1,15 +1,5 @@
 /*
- * inventory.c - Fresh Picks: Admin Inventory Management (v5 — Direct Indexing)
- * =============================================================================
- * Called by Flask via subprocess.run(): ./inventory <command> [arguments...]
- * OUTPUT CONTRACT: Always "SUCCESS|message" or "ERROR|reason".
- *
- * COMMANDS (argv[1]):
- *   update_stock       <veg_id> <new_stock_g> <new_price> <new_validity>
- *   update_promo_stock <vf_id>  <new_stock_g>
- *   list_promo
- *
- * Team: CodeCrafters | Project: Fresh Picks | SDP-1
+ * inventory.c - Fresh Picks: Admin Inventory Management
  */
 
 
