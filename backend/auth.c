@@ -147,10 +147,15 @@ void cmd_get_profile(const char *user_id,
 
 
 /* cmd_get_admin_profile — O(1) lookup by admin_id via admin_table */
-void cmd_get_admin_profile(const char *admin_id,
-                           AdminNode **admin_table) {
-    if (!admin_id || strlen(admin_id) == 0) { PRINT_ERROR("Admin ID required");      return; }
-    if (!admin_table)                        { PRINT_ERROR("Admin database not found"); return; }
+void cmd_get_admin_profile(const char *admin_id, AdminNode **admin_table) {
+    if (!admin_id || strlen(admin_id) == 0) { 
+        PRINT_ERROR("Admin ID required"); 
+        return; 
+    }
+    if (!admin_table) { 
+        PRINT_ERROR("Admin database not initialized"); 
+        return; 
+    }
 
     int idx = get_index_from_id(admin_id);
     if (idx < 0 || idx >= ADMIN_TABLE_SIZE || !admin_table[idx]) {
@@ -158,12 +163,12 @@ void cmd_get_admin_profile(const char *admin_id,
         return;
     }
 
-    AdminNode *match = admin_table[idx];
+    AdminCreds *a = &admin_table[idx]->data;
     printf("SUCCESS|%s|%s|%s|%s\n",
-           match->data.admin_id,
-           match->data.username,
-           match->data.admin_name,
-           match->data.email);
+           a->admin_id,
+           a->username,
+           a->admin_name,
+           a->email);
 }
 
 
@@ -276,6 +281,9 @@ int main(int argc, char *argv[]) {
         PRINT_ERROR("No action specified. Usage: ./auth <action> [args...]");
         return 1;
     }
+
+    printf("sizeof(User)       = %zu\n", sizeof(User));
+    printf("sizeof(AdminCreds) = %zu\n", sizeof(AdminCreds));
 
     /* ── Load SLLs (source of truth) ── */
     UserNode  *user_head  = load_user_sll();

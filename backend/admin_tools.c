@@ -1,5 +1,9 @@
 /*
- * admin_tools.c - Fresh Picks: Admin Terminal Utility
+ * admin_tools.c - Fresh Picks: Admin Terminal Utility 
+ *
+ * Compile Command:  gcc -Wall -Wextra -o admin_tools admin_tools.c utils.c -lm
+ * gcc -Wall -Wextra -o auth1 auth1.c utils.c -lm
+ * Run Command:  .\admin_tools.exe .\auth1.exe
  */
 
 #include <stdio.h>
