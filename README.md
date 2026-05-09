@@ -14,12 +14,14 @@ Fresh Picks is a high-performance, intra-net hosted e-commerce platform designed
 
 ---
 
-## 🧠 Data Structure Architecture (The C-Engine)
-Every core feature is powered by a specific data structure implementation for optimized performance:
-* **Doubly Linked List (DLL):** Manages the real-time shopping cart for instantaneous item removal and updates.
-* **Min-Heap:** Powers the **Admin Priority Queue**, ensuring "Morning" delivery slots are always dispatched first.
-* **Circular Linked List (CLL):** Implements a round-robin delivery boy assignment system to ensure fair workload distribution.
-* **Standard Queue (FIFO):** Processes incoming orders in the exact sequence they are placed.
+## 🧠 Core Data Structures & Algorithmic Optimizations
+The backend architecture deliberately avoids standard relational databases, instead leveraging custom-built data structures in C to achieve highly optimized memory management and execution speeds:
+
+* **Singly Linked List (SLL):** Serves as the foundational memory-allocation architecture. It dynamically deserializes and chains database records (Users, Products, Orders) directly from flat binary `.dat` files at runtime, allowing the dataset to scale without rigid array constraints.
+* **Doubly Linked List (DLL):** Drives the real-time shopping cart state. Bi-directional node traversal enables $O(1)$ mid-list item deletions and instantaneous quantity mutations, completely bypassing the shifting overhead native to standard arrays.
+* **Min-Heap (Priority Queue):** Powers the Admin Dispatch Engine. It actively constructs a priority tree to sort queued orders based on delivery urgency, ensuring that high-priority "Morning" slots continuously bubble to the root node for $O(\log N)$ extraction and dispatch.
+* **Circular Linked List (CLL):** Facilitates the automated logistics engine. It implements an infinite, wrap-around round-robin scheduling algorithm, moving a continuous pointer to guarantee mathematically equitable order distribution among active delivery personnel.
+* **Custom O(1) Pointer Table (Direct Indexing):** To eliminate the performance latency of standard $O(N)$ linked list searches, the backend implements a specialized lookup table. Upon initializing, the C engine parses the numeric component of entity IDs (e.g., extracting `41` from `U1042` by subtracting the BASE ID “1001”) and maps the memory address of the corresponding SLL node to that specific index in a global pointer array. This enables instantaneous, collision-free data retrieval and updates.
 
 ---
 

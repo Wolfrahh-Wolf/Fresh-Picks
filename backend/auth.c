@@ -1,21 +1,5 @@
 /*
  * auth.c - Fresh Picks: Authentication & Profile Logic (v4 — Binary Storage)
- * ===========================================================================
- * Called by Flask via subprocess.run(): ./auth <action> [arg1] [arg2] ...
- *
- * OUTPUT CONTRACT: Always "SUCCESS|<data>" or "ERROR|<reason>".
- *
- * COMMANDS (argv[1]):
- *   login_user       <username> <password>
- *   login_admin      <username> <password>
- *   register         <username> <password> <full_name> <email> <phone> <address>
- *   get_profile      <user_id>
- *   get_admin_profile<admin_id>
- *   change_pass_user <user_id> <old_password> <new_password>
- *   change_pass_admin<admin_id> <old_password> <new_password>
- *   update_profile   <user_id> <field> <new_value>
- *
- * Team: CodeCrafters | Project: Fresh Picks | SDP-1
  */
 
 #include <stdio.h>

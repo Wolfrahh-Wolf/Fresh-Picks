@@ -1,26 +1,5 @@
 /*
- * analytics.c - Fresh Picks: Admin Analytics Dashboard (v6 — Direct SLL Traversal)
- * ==================================================================================
- * Called by Flask via subprocess.run(): ./analytics <command>
- *
- * METRICS EMITTED (in order):
- *   total_revenue          float  — sum of total_amount across all orders
- *   total_orders           int    — count of all orders
- *   avg_order_value        float  — total_revenue / total_orders
- *   orders_placed          int    — status == "Order Placed"
- *   orders_out             int    — status == "Out for Delivery"
- *   orders_delivered       int    — status == "Delivered"
- *   orders_cancelled       int    — status == "Cancelled"
- *   slot_morning           int    — delivery_slot == "Morning"
- *   slot_afternoon         int    — delivery_slot == "Afternoon"
- *   slot_evening           int    — delivery_slot == "Evening"
- *   total_stock_kg         float  — sum of all stock_g / 1000
- *   low_stock_items        int    — count of vegs with stock_g < 5000
- *   total_users            int    — count of all registered users
- *   active_delivery_boys   int    — delivery boys with is_active == 1
- *   inactive_delivery_boys int    — delivery boys with is_active == 0
- *
- * Team: CodeCrafters | Project: Fresh Picks | SDP-1
+ * analytics.c - Fresh Picks: Admin Analytics Dashboard
  */
 
 #include <stdio.h>

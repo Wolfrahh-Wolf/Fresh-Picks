@@ -7,65 +7,7 @@ Run this script ONCE to generate two files:
 
 These two files together enable HTTPS on our Flask server.
 
-HOW TO RUN:
-  cd Fresh-Picks/app
-  pip install cryptography
-  python generate_certs.py
-
-WHAT GETS CREATED:
-  Fresh-Picks/app/cert.pem   <- Give this to anyone who wants to verify you
-  Fresh-Picks/app/key.pem    <- NEVER share this. Keep it secret.
-
-═══════════════════════════════════════════════════════════════
-  DEVELOPER GLOSSARY (Read this once — it will make sense!)
-═══════════════════════════════════════════════════════════════
-
-  SSL / TLS:
-    SSL (Secure Sockets Layer) and its modern replacement TLS
-    (Transport Layer Security) are protocols that ENCRYPT the
-    data travelling between a browser and our server.
-
-    Without SSL:  Browser → [username=alice&pass=1234] → Server
-                  Anyone on the same Wi-Fi can READ this with a
-                  tool like Wireshark. This is called a
-                  "Man-in-the-Middle" (MITM) attack.
-
-    With SSL:     Browser → [X#@!$%^&*9kQ2...] → Server
-                  The data is scrambled. Only our server (holding
-                  key.pem) can unscramble it. Safe on public Wi-Fi!
-
-  Certificate (cert.pem):
-    Think of this as our server's "Digital ID Card" or "Passport."
-    It contains:
-      - Our server's public key (used by browsers to encrypt data)
-      - Our server's identity info (name, organization)
-      - A validity period (expiry date)
-
-    A REAL certificate is issued and signed by a trusted authority
-    like DigiCert or Let's Encrypt. Browsers trust these.
-
-  Self-Signed Certificate:
-    Since we are a student project, we SIGN our own cert —
-    like writing your own recommendation letter.
-    The browser knows it wasn't signed by a trusted authority,
-    so it shows a "⚠️ Your connection is not private" warning.
-    This is EXPECTED and NORMAL for local/demo use.
-
-    HOW TO BYPASS FOR DEMO:
-      Chrome/Edge: Click "Advanced" → "Proceed to <IP> (unsafe)"
-      Firefox:     Click "Advanced" → "Accept the Risk and Continue"
-
-  key.pem (Private Key):
-    This is the "master key" that decrypts everything the browser
-    sends using our certificate. NEVER commit this to GitHub.
-    It should be in your .gitignore file.
-
-  RSA 2048-bit:
-    The encryption algorithm we use. 2048-bit refers to the key
-    size — like a password that is 617 digits long. Unbreakable
-    with current computers.
-
-Team: CodeCrafters | Project: Fresh Picks | SDP-1
+Encryption Algorithm: RSA 2048-bit
 """
 
 import os
@@ -84,24 +26,21 @@ except ImportError:
 
 
 # ─────────────────────────────────────────────────────────────
-# CONFIGURATION — Edit these if you want different values.
-# These are embedded in the certificate's identity fields.
+# CONFIGURATION — These are embedded in the certificate's identity fields.
 # ─────────────────────────────────────────────────────────────
 
-# Where to save the generated files (same folder as app.py)
+# Folder Path for Certificates (same folder as app.py)
 OUTPUT_DIR   = os.path.dirname(os.path.abspath(__file__))
 CERT_FILE    = os.path.join(OUTPUT_DIR, "cert.pem")
 KEY_FILE     = os.path.join(OUTPUT_DIR, "key.pem")
 
 # Certificate identity metadata
-ORG_NAME     = "CodeCrafters"          # Your team/organization name
-PROJECT_NAME = "FreshPicks"            # Common Name (CN) — like a hostname label
-COUNTRY      = "IN"                    # 2-letter ISO country code (IN = India)
-STATE        = "Tamil Nadu"            # State or province
-CITY         = "Chennai"               # City / Locality
+ORG_NAME     = "CodeCrafters"          
+PROJECT_NAME = "FreshPicks"            
+COUNTRY      = "IN"                    
+STATE        = "Tamil Nadu"            
+CITY         = "Chennai"               
 
-# How long the certificate is valid (in days).
-# 365 = 1 year. For a demo project, this is more than enough.
 VALIDITY_DAYS = 365
 
 
@@ -113,13 +52,6 @@ def generate_private_key():
     It generates a KEY PAIR:
       - Private Key (key.pem): kept secret on the server
       - Public Key  (embedded in cert.pem): shared with everyone
-
-    HOW ENCRYPTION WORKS WITH THIS PAIR:
-      1. Browser gets our public key from cert.pem
-      2. Browser encrypts its data using the public key
-      3. Only our private key (key.pem) can decrypt it
-      → Even if someone steals the encrypted data, they can't
-        read it without key.pem
 
     public_exponent=65537:
       A standard value used in RSA. Think of it as a parameter
@@ -153,15 +85,6 @@ def generate_certificate(private_key):
       - Who issued/signed it?        (Issuer — same as Subject for self-signed)
       - When does it expire?         (Validity period)
       - What is the public key?      (Embedded inside)
-
-    SELF-SIGNED means:
-      Normally, a Certificate Authority (CA) like DigiCert checks
-      your identity and then signs your certificate with their
-      trusted key. Browsers trust those CAs by default.
-
-      Since we are signing it ourselves (subject == issuer),
-      browsers don't recognize our "authority" — hence the warning.
-      For a college demo over LAN, this is perfectly fine.
     """
     print("[2/3] Building self-signed X.509 certificate...")
 
@@ -218,19 +141,8 @@ def save_files(private_key, cert):
     PURPOSE: Write the private key and certificate to .pem files.
 
     PEM format (Privacy Enhanced Mail):
-      An old name for a common text-based format for storing
-      cryptographic objects. It looks like:
-        -----BEGIN CERTIFICATE-----
-        MIIBIjANBgkq...base64 encoded data...
-        -----END CERTIFICATE-----
-
     The data inside is Base64-encoded — a way to represent binary
     data as readable ASCII text so it can be stored in a text file.
-
-    Encryption for key.pem:
-      serialization.NoEncryption() means we DON'T password-protect
-      the key file. For a demo project this is fine. In production,
-      you would use BestAvailableEncryption(b"your_passphrase").
     """
     print("[3/3] Writing files to disk...")
 

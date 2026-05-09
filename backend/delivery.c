@@ -1,22 +1,5 @@
 /*
- * delivery.c - Fresh Picks: Post-Order Delivery Management (v4)
- * ==============================================================
- * COMMANDS (argv[1]):
- *
- *   update_status <order_id> <new_status>
- *   cancel_order <order_id>
- *   get_active_orders
- *   assign_agent <order_id> <boy_id>
- *   batch_promote_slot <slot_name>
- *   list_all_orders
- *   list_all_orders_sorted
- *
- * ─────────────────────────────────────────────────────────────────
- * OUTPUT FORMAT:
- *   Always "SUCCESS|message/count" or "ERROR|reason"
- *   Flask reads stdout and passes it back to the frontend as JSON.
- *
- * Team: CodeCrafters | Project: Fresh Picks | SDP-1
+ * delivery.c - Fresh Picks: Post-Order Delivery Management
  */
 
 #include <stdio.h>

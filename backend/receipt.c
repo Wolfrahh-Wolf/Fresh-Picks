@@ -1,26 +1,5 @@
 /*
- * receipt.c - Fresh Picks: Order Receipt Data Extractor (v4 — Direct Indexing)
- * =============================================================================
- * Standalone C binary. Takes an order_id as the ONLY argument.
- * Looks up the order via an OrderNode** pointer table (O(1)), then the user
- * via a UserNode** pointer table (O(1)), then the delivery boy via linear
- * SLL traversal (no pointer table available for DeliveryBoy).
- *
- * OUTPUT (single line to stdout):
- *   SUCCESS|order_id|user_id|full_name|user_phone|user_email|
- *           address|slot|status|timestamp|boy_name|boy_phone|
- *           total|items_string
- *
- * ERROR:
- *   ERROR|reason message
- *
- * COMPILE:
- *   gcc -Wall -Wextra -o receipt receipt.c utils.c -lm
- *
- * USAGE:
- *   ./receipt ORD1001
- *
- * Team: CodeCrafters | Project: Fresh Picks | SDP-1
+ * receipt.c - Fresh Picks: Order Receipt Data Extractor
  */
 
 #include <stdio.h>

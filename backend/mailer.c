@@ -1,19 +1,6 @@
 /*
- * Fresh Picks C Mailer
- * --------------------
- * Cross-platform SMTP mailer using libcurl's native SMTP + MIME APIs.
- *
- * Usage:
- *   mailer <recipient_email> <absolute_path_to_attachment>
- *   mailer otp <recipient_email> <otp_code> <register|cancel_order|password_change> [reference]
- *
- * Config:
- *   Put credentials in backend/mailer.env:
- *     SMTP_EMAIL=yourgmail@gmail.com
- *     SMTP_APP_PASSWORD=your16charapppassword
- *     SMTP_HOST=smtp.gmail.com
- *     SMTP_PORT=465
- *     SENDER_NAME=FreshPicks Orders
+ * delivery.c - Fresh Picks: Cross-platform SMTP mailer
+ *              using libcurl's native SMTP + MIME APIs.
  */
 
 #include <ctype.h>

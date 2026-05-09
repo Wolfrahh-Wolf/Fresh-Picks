@@ -1,20 +1,5 @@
 /*
- * order.c - Fresh Picks: Shopping Cart, Payment & Order Management (v5)
- * ======================================================================
- * Called by Flask (app.py) via subprocess.run() like this:
- *   ./order <command> [arguments...]
- *
- * COMMANDS (argv[1]):
- *   list_products                           → Read veg SLL, print all
- *   add_to_cart   <uid> <vid> <grams>       → Add/update item in cart DLL
- *   view_cart     <uid>                     → Print cart items + total
- *   remove_item   <uid> <vid>               → Remove one item from cart
- *   checkout      <uid> <slot>              → Full checkout pipeline
- *   get_orders    <uid>                     → All orders for one user
- *   update_order_status <order_id> <status> → Change status in orders.dat
- *   list_all_orders                         → All orders, newest-first
- *
- * Team: CodeCrafters | Project: Fresh Picks | SDP-1
+ * order.c - Fresh Picks: Shopping Cart, Payment & Order Management
  */
 
 #include <stdio.h>

@@ -1,31 +1,5 @@
 /*
- * utils.c - Fresh Picks: Data Structure & Binary I/O Utility Library
- * ===================================================================
- *
- * FILE LOADING:
- *   Each entity (User, Vegetable, Order, FreeItem, DeliveryBoy, AdminCreds)
- *   gets three functions:
- *     load_<entity>_sll()  — fread structs from .dat into an in-memory SLL
- *     save_<entity>_sll()  — fwrite the entire SLL back to the .dat file
- *     free_<entity>_sll()  — walk and free every heap-allocated node
- *
- * FILE LOCKING STRATEGY:
- *   load uses LOCK_SH (shared read lock)  — multiple readers allowed.
- *   save uses LOCK_EX (exclusive write lock) — one writer at a time.
- *   This prevents data corruption when multiple users place orders
- *   or the admin updates stock simultaneously via Flask's multi-thread mode.
- *
- * HOW TO USE (in any business-logic .c file):
- *   1. Load:   VegNode* vegs = load_veg_sll();
- *   2. Modify: traverse the SLL and update fields in-memory.
- *   3. Save:   save_veg_sll(vegs);
- *   4. Free:   free_veg_sll(vegs);
- *
- * COMPILE:
- *   Always link utils.c alongside the business-logic file:
- *     gcc -Wall -Wextra -o order order.c utils.c -lm
- *
- * Team: CodeCrafters | Project: Fresh Picks | SDP-1
+ * utils.c - Fresh Picks: Data Structure & Binary I/O Utility Library 
  */
 
 

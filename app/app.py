@@ -1,49 +1,5 @@
 """
 app.py - Fresh Picks: Main Flask Application
-============================================================================
-
-ROUTES:
-  GET  /                        -> Landing page (index.html)
-  GET  /login/<role>            -> Unified login page (user or admin)
-  GET  /register                -> Register page
-  GET  /user_home               -> User dashboard (requires user login)
-  GET  /admin_dash              -> Admin dashboard (requires admin login)
-  GET  /profile                 -> User profile page
-  GET  /security                -> Security/Change Password page
-  GET  /shop                    -> Shop / vegetable listing
-  GET  /cart                    -> Cart page
-  GET  /user_orders             -> User order history page
-  GET  /admin_inventory         -> Admin inventory management page
-  GET  /admin_orders            -> Admin orders dispatch page
-  GET  /logout                  -> Clear session and redirect to home
-  POST /api/login               -> Validate login via C auth binary
-  POST /api/register            -> Stage new user signup and send OTP
-  POST /api/get_profile         -> Fetch profile data via C auth binary
-  POST /api/update_profile      -> Update one profile field
-  POST /api/send_password_change_otp -> Send OTP for password change
-  POST /api/resend_password_change_otp -> Resend OTP for password change
-  POST /api/change_password     -> Unified password change (user OR admin)
-  GET  /api/list_products       -> List all vegetables via C order binary
-  POST /api/update_stock        -> Update vegetable stock (admin only)
-  POST /api/update_promo_stock  -> Update freebie stock (admin only)
-  POST /api/add_to_cart         -> Add item to cart
-  POST /api/view_cart           -> View cart contents
-  POST /api/update_cart_qty     -> Update item quantity in cart
-  POST /api/remove_item         -> Remove item from cart
-  POST /api/checkout            -> Place order
-  POST /api/get_user_orders     -> Get order history for logged-in user
-  GET  /api/admin_orders        -> Get all orders (admin, heap-sorted)
-  POST /api/get_admin_orders    -> Get all orders newest-first (admin)
-  POST /api/update_order_status -> Update order status (admin only)
-  POST /api/promote_slot_orders -> Batch-promote slot orders (admin only)
-  POST /api/send_cancel_order_otp -> Send OTP for order cancellation
-  POST /api/cancel_order_with_otp -> Cancel an order after OTP validation
-  GET  /api/get_active_orders   -> Get active (placed/OFD) orders (admin)
-  POST /api/assign_agent        -> Assign delivery agent (admin only)
-  GET  /api/download_receipt/<order_id> -> Generate and stream PDF receipt
-  POST /api/get_admin_info      -> Return admin session data as JSON
-
-Team: CodeCrafters | Project: Fresh Picks | SDP-1
 """
 
 import ssl
@@ -53,7 +9,7 @@ import secrets
 import tempfile
 import razorpay
 from datetime import datetime, timedelta
-from config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
+from config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, APP_SECRET_KEY
 
 from flask import (
     Flask,
@@ -87,7 +43,7 @@ app = Flask(
 # ─────────────────────────────────────────────────────────────
 # Secret Key
 # ─────────────────────────────────────────────────────────────
-app.secret_key = "fresh_picks_secret_codecrafters_2026"
+app.secret_key = APP_SECRET_KEY
 
 # ─────────────────────────────────────────────────────────────
 # SSL Certificate Paths (Relative)
