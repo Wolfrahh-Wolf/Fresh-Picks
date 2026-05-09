@@ -236,8 +236,8 @@
 {% block extra_scripts %}
 <script>
     (async function loadAdminInfo() {
-        document.getElementById("adminNameDisplay").textContent  = "CodeCrafters";
-        document.getElementById("adminEmailDisplay").textContent = "codecrafters@gmail.com";
+        document.getElementById("adminNameDisplay").textContent  = "Loading...";
+        document.getElementById("adminEmailDisplay").textContent = "Loading...";
 
         try {
             const res    = await fetch("/api/get_admin_info", {
@@ -248,7 +248,9 @@
             if (result.status === "SUCCESS") {
                 document.getElementById("adminUsernameInfo").textContent = result.username || "—";
                 document.getElementById("adminIdDisplay").textContent    = result.user_id  || "—";
-                document.getElementById("adminNameDisplay").textContent  = result.name     || "CodeCrafters";
+                document.getElementById("adminNameDisplay").textContent  = result.name     || "Admin";
+                
+                document.getElementById("adminEmailDisplay").textContent = result.email    || "No Email Provided";
             }
         } catch (err) {
             console.warn("Could not load admin info:", err);

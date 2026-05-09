@@ -922,12 +922,21 @@ def api_get_admin_info():
     if session.get("role") != "admin":
         return jsonify({"status": "ERROR", "message": "Admin only"})
 
-    return jsonify({
-        "status":   "SUCCESS",
-        "user_id":  session.get("user_id",    "—"),
-        "username": session.get("username",   "—"),
-        "name":     session.get("admin_name", "—")
-    })
+    admin_id = session.get("user_id")
+    
+    result = run_c_binary("auth", ["get_admin_profile", admin_id])
+
+    if result["status"] == "SUCCESS":
+        parts = result["data"].split("|")
+        return jsonify({
+            "status":   "SUCCESS",
+            "user_id":  parts[0],
+            "username": parts[1],
+            "name":     parts[2],
+            "email":    parts[3]  
+        })
+    
+    return jsonify(result)
 
 
 @app.route("/api/get_profile", methods=["POST"])
