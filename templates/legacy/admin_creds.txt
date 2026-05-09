@@ -1,2 +1,0 @@
-A1001|Admin|Admin@123|CodeCrafters|codecrafters@gmail.com
-A1002|Wolf|Wolf@123|Wolfrahh|wolfrahh@gmail.com
