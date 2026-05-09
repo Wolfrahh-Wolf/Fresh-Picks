@@ -583,6 +583,11 @@ def index():
     return render_template("index.html")
 
 
+@app.route('/presentation')
+def presentation():
+    return render_template('presentation.html')
+
+
 @app.route("/login/<role>")
 def login_page(role):
     # Unified login: handles both /login/user and /login/admin.
