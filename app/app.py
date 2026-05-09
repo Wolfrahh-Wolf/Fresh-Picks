@@ -8,6 +8,7 @@ import re
 import secrets
 import tempfile
 import razorpay
+import hashlib
 from datetime import datetime, timedelta
 from config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, APP_SECRET_KEY
 
@@ -66,6 +67,16 @@ def _safe_float(value, default=0.0):
         return float(value)
     except (ValueError, TypeError):
         return default
+
+def _hash_password(plaintext: str) -> str:
+    """
+    PURPOSE: One-way SHA-256 digest for password storage.
+             Returns a 64-char lowercase hex string that fits
+             exactly in auth.c's char password[MAX_STR_LEN] (128).
+    PARAMS:  plaintext — the raw password string received from the client.
+    RETURNS: 64-char hex digest.
+    """
+    return hashlib.sha256(plaintext.encode("utf-8")).hexdigest()
 
 
 def _require_login(role=None):
@@ -738,8 +749,8 @@ def api_login():
         return jsonify({"status": "ERROR", "message": "Invalid role"})
 
     # ── Call the appropriate auth command ─────────────────────
-    cmd    = "login_admin" if role == "admin" else "login_user"
-    result = run_c_binary("auth", [cmd, username, password])
+    cmd      = "login_admin" if role == "admin" else "login_user"
+    result   = run_c_binary("auth", [cmd, username, _hash_password(password)])
 
     if result["status"] != "SUCCESS":
         return jsonify({"status": "ERROR", "message": result["data"]})
@@ -800,7 +811,7 @@ def api_register():
     address = f"{door},{street},{area},{pincode}"
     pending_registration = {
         "username": username,
-        "password": password,
+        "password": _hash_password(password),
         "full_name": full_name,
         "email": email,
         "phone": phone,
@@ -1107,7 +1118,8 @@ def api_change_password():
     _clear_otp_flow(flow_key)
 
     cmd = "change_pass_admin" if session.get("role") == "admin" else "change_pass_user"
-    result = run_c_binary("auth", [cmd, session["user_id"], old_p, new_p])
+    result = run_c_binary("auth", [cmd, session["user_id"],
+                                   _hash_password(old_p), _hash_password(new_p)])
 
     return jsonify({"status": result["status"], "message": result["data"]})
 
