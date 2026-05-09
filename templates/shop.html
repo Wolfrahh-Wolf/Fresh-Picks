@@ -1,0 +1,1223 @@
+{% extends "base.html" %}
+{#
+  shop.html — Fresh Picks: Product Shop Page
+  ==========================================
+  Regenerated from vegetables.html.
+
+  ARCHITECTURE:
+    Inherits from base.html via {% extends %}.
+    All route-facing content lives in {% block content %}.
+    Page-scoped CSS lives in {% block extra_styles %}.
+    Page-scoped JS  lives in {% block extra_scripts %}.
+
+  DATA FLOW:
+    1. Page loads  → JS calls GET  /api/list_products
+    2. User selects qty → JS calls POST /api/add_to_cart
+       Payload: { "veg_id": "...", "qty_g": <integer grams> }
+
+  QUANTITY ENGINE:
+    - DB stores stock_g in GRAMS  (e.g. 50000 = 50 kg)
+    - DB stores price_per_1000g   (e.g. 40 = ₹40 / kg)
+    - UI works in grams internally at all times.
+    - Quick buttons : 250 g / 500 g / 1000 g
+    - Custom input  : any multiple of 50 g (step=50, min=50)
+    - Default selection: 500 g
+
+  PROGRESS BAR  (min order ₹100):
+    Red    → cartTotal < ₹75
+    Yellow → ₹75 ≤ cartTotal < ₹100
+    Green  → cartTotal ≥ ₹100  ← ready to checkout
+
+  Team: CodeCrafters | Project: Fresh Picks | SDP-1
+#}
+
+{% block title %}Shop — FreshPicks{% endblock %}
+
+
+{# ══════════════════════════════════════════════════════════════
+   PAGE-SCOPED STYLES
+   Injected into base.html's <head> via {% block extra_head %}.
+   All colour values reference variables defined in dark-theme.css.
+══════════════════════════════════════════════════════════════ #}
+{% block extra_head %}
+<style>
+/* ── Category sidebar pills ─────────────────────── */
+.category-pill {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.85rem;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.category-pill:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+}
+.category-pill.active {
+    background: rgba(0, 122, 204, 0.15);
+    border-color: rgba(0, 122, 204, 0.4);
+    color: var(--accent-light);
+    font-weight: 600;
+}
+.category-pill .cat-count {
+    float: right;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    padding: 0.1em 0.5em;
+    border-radius: 10px;
+    margin-left: 0.4rem;
+}
+.category-pill.active .cat-count {
+    background: rgba(0, 122, 204, 0.3);
+    color: var(--accent-light);
+}
+
+/* ── Product card ────────────────────────────────── */
+.veg-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    transition: transform var(--transition), box-shadow var(--transition),
+                border-color var(--transition);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+.veg-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(0,122,204,0.15);
+    border-color: rgba(0,122,204,0.35);
+}
+
+/* 1:1 image container */
+.card-img-wrap {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: var(--bg-elevated);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+}
+.card-img-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+/* Injected by onerror fallback */
+.inv-img-placeholder {
+    font-size: 3.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: var(--text-muted);
+}
+
+/* Tag badge overlaid on image */
+.card-tag-badge {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    font-size: 0.66rem;
+    font-weight: 700;
+    padding: 0.25em 0.65em;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+    color: #1E1E1E;
+    line-height: 1.5;
+    pointer-events: none;
+}
+
+/* Out-of-stock overlay */
+.oos-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.62);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.oos-overlay span {
+    background: var(--danger);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.85rem;
+    padding: 0.3em 0.9em;
+    border-radius: 4px;
+}
+
+/* Card body */
+.veg-card-body {
+    padding: 0.95rem 1rem 1rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+/* Validity chip */
+.validity-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.15em 0.55em;
+}
+
+/* Quick-qty buttons */
+.qty-btn {
+    flex: 1;
+    padding: 0.3rem 0.2rem;
+    font-size: 0.75rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all var(--transition);
+    line-height: 1.4;
+}
+.qty-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent-light);
+}
+.qty-btn.active {
+    border-color: var(--accent);
+    background: rgba(0,122,204,0.15);
+    color: var(--accent-light);
+    font-weight: 600;
+}
+
+/* Custom gram input */
+.custom-gram-input {
+    flex: 1;
+    width: 100%;
+    padding: 0.35rem 0.65rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    outline: none;
+    transition: border-color var(--transition), box-shadow var(--transition);
+}
+.custom-gram-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,122,204,0.15);
+}
+.custom-gram-input::placeholder { color: var(--text-muted); opacity: 0.7; }
+
+/* ── Min-Order Progress Bar — Glassmorphism, natural flow (NOT sticky) ── */
+#progressSection {
+    background: rgba(37, 37, 38, 0.8);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid #3e3e42;
+    border-radius: var(--radius-lg);
+    padding: 0.85rem 1.25rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    /* position: sticky and top: 60px intentionally removed */
+}
+
+/* Sidebar sticky on desktop */
+@media (min-width: 992px) {
+    #shopSidebar {
+        position: sticky;
+        top: 70px;
+        max-height: calc(100vh - 90px);
+        overflow-y: auto;
+    }
+}
+
+/* Toast */
+#cartToast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 9999;
+    background: var(--bg-elevated);
+    border: 1px solid var(--success);
+    border-radius: var(--radius-lg);
+    padding: 0.85rem 1.25rem;
+    min-width: 230px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    transform: translateY(100px) scale(0.9);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    pointer-events: none;
+}
+#cartToast.toast-show {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+}
+
+/* Large spinner */
+.spinner-lg {
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* input-group addon */
+.input-group-text {
+    background: var(--bg-elevated) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-muted) !important;
+}
+
+#resultCount { font-size: 0.78rem; color: var(--text-muted); }
+
+/* ── Category Section Header ─────────────────────────────── */
+.cat-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    padding: 0.65rem 1rem;
+    margin-top: 1.4rem;
+    margin-bottom: 0;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    user-select: none;
+    transition: border-color var(--transition), background var(--transition),
+                box-shadow var(--transition);
+}
+.cat-section-header:first-of-type { margin-top: 0; }
+.cat-section-header:hover {
+    border-color: rgba(0,122,204,0.5);
+    border-left-color: var(--accent);
+    background: rgba(0,122,204,0.07);
+    box-shadow: 0 2px 8px rgba(0,122,204,0.1);
+}
+.cat-section-title {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    flex: 1;
+    text-transform: capitalize;
+    letter-spacing: 0.01em;
+}
+.cat-section-count {
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.15em 0.6em;
+    border-radius: 10px;
+    min-width: 1.6rem;
+    text-align: center;
+}
+.cat-chevron {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+}
+.cat-chevron.open { transform: rotate(180deg); }
+
+.cat-grid-wrap {
+    overflow: hidden;
+    transition: max-height 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.28s ease;
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+}
+
+.cat-grid-wrap.expanded {
+    max-height: 9999px;
+    opacity: 1;
+    padding-top: 0.75rem;
+    padding-bottom: 1.25rem;
+}
+
+/* ── Fixed card dimensions (desktop) ────────────────────── */
+.veg-card {
+    min-height: 520px;
+}
+.veg-card-body {
+    min-height: 0;
+}
+.veg-card-body h6.text-bright {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 2.6rem;
+}
+
+/* ── Responsive: hide sidebar + 3-col small cards on narrow screens ── */
+@media (max-width: 991.98px) {
+
+    /* Hide entire sidebar column */
+    .col-12.col-lg-2  { display: none !important; }
+    .col-12.col-lg-10 {
+        width: 100% !important;
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* 3 columns — overrides Bootstrap's row-cols-* on the inner row */
+    #productGrid .row > .col {
+        width: 33.333% !important;
+        flex: 0 0 33.333% !important;
+        max-width: 33.333% !important;
+    }
+
+    /* Unlock the 520px desktop height lock */
+    .veg-card { min-height: unset !important; }
+    .veg-card-body h6.text-bright { min-height: unset !important; }
+
+    /* Fixed image height — prevents ballooning with col width */
+    .card-img-wrap {
+        aspect-ratio: 1 / 1 !important;
+        height: unset !important;
+    }
+
+    /* Scale everything inside the card body down */
+    .veg-card-body       { padding: 0.5rem 0.55rem 0.55rem !important; }
+    .veg-card-body h6.text-bright { font-size: 0.78rem !important; }
+    .validity-chip       { font-size: 0.58rem !important; padding: 0.1em 0.4em !important; }
+    .qty-btn             { font-size: 0.62rem !important; padding: 0.15rem 0.05rem !important; }
+    .custom-gram-input   { font-size: 0.65rem !important; padding: 0.2rem 0.35rem !important; }
+    [id^="qtyDisplay-"]  { font-size: 0.65rem !important; }
+    #productGrid .btn.btn-primary {
+        font-size: 0.7rem !important;
+        padding: 0.35rem 0.25rem !important;
+    }
+    #productGrid .row { --bs-gutter-x: 0.5rem; --bs-gutter-y: 0.5rem; }
+}
+
+/* ── 2 cols on very small phones ── */
+@media (max-width: 479px) {
+    #productGrid .row > .col {
+        width: 50% !important;
+        flex: 0 0 50% !important;
+        max-width: 50% !important;
+    }
+    .card-img-wrap {
+        aspect-ratio: 1 / 1 !important;
+        height: unset !important; }
+}
+
+</style>
+{% endblock %}
+
+
+{# ══════════════════════════════════════════════════════════════
+   CONTENT BLOCK
+══════════════════════════════════════════════════════════════ #}
+{% block content %}
+<div class="container-xl px-3 px-md-4 py-4">
+
+    {# ── Page Header ─────────────────────────────────────────── #}
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="mb-0 text-bright">
+                <i class="bi bi-basket me-2" style="color:var(--accent);"></i>Fresh Vegetables
+            </h4>
+            <p class="text-muted mb-0" style="font-size:0.82rem;">
+                Farm-fresh produce, delivered to your door.
+            </p>
+        </div>
+        <a href="/cart" class="btn btn-primary d-flex align-items-center gap-2">
+            <i class="bi bi-cart3"></i>View Cart
+            <span id="cartBadge"
+                  class="badge bg-light text-dark"
+                  style="font-size:0.72rem; display:none;">₹0</span>
+        </a>
+    </div>
+
+    {# ── Cart Progress Bar ───────────────────────────────────── #}
+    {#
+       Stays visible while the user scrolls through products.
+       JS colours it based on three thresholds:
+         --danger  (red)    → < ₹75
+         --warning (yellow) → ₹75 – ₹99
+         --success (green)  → ≥ ₹100
+    #}
+    <div id="progressSection">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span style="font-size:0.8rem; color:var(--text-muted);">
+                <i class="bi bi-info-circle me-1"></i>
+                Minimum order: <strong class="text-bright">₹100</strong>
+            </span>
+            <span id="progressLabel" style="font-size:0.82rem; font-weight:600;"></span>
+        </div>
+        <div class="progress"
+             style="height:7px; background:var(--bg-elevated); border-radius:4px;">
+            <div id="cartProgressBar"
+                 class="progress-bar"
+                 role="progressbar"
+                 style="width:0%; transition:width 0.4s ease, background-color 0.4s ease;"
+                 aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+            </div>
+        </div>
+    </div>
+
+    {# ── Two-column layout ───────────────────────────────────── #}
+    <div class="row g-4">
+
+        {# ── Sidebar ──────────────────────────────────────────── #}
+        <div class="col-12 col-lg-2">
+            <div id="shopSidebar">
+
+                {# Search input #}
+                <div class="input-group mb-3">
+                    <span class="input-group-text">
+                        <i class="bi bi-search" style="font-size:0.85rem;"></i>
+                    </span>
+                    <input type="text"
+                           class="form-control"
+                           id="searchInput"
+                           placeholder="Search…"
+                           oninput="filterProducts()"
+                           style="font-size:0.85rem;">
+                </div>
+
+                {# Category heading #}
+                <p style="font-size:0.7rem; text-transform:uppercase;
+                           letter-spacing:0.08em; color:var(--text-muted);
+                           margin-bottom:0.5rem; padding-left:0.2rem;">
+                    Categories
+                </p>
+
+                {# Pills — populated by buildCategorySidebar() #}
+                <div id="categoryList"></div>
+
+            </div>
+        </div>
+
+        {# ── Product area ─────────────────────────────────────── #}
+        <div class="col-12 col-lg-10">
+
+            {# Result count + clear-filters button #}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <span id="resultCount"></span>
+                <button id="clearFiltersBtn"
+                        onclick="clearFilters()"
+                        class="btn btn-sm"
+                        style="font-size:0.78rem; color:var(--text-muted);
+                               background:transparent; border:1px solid var(--border-color);
+                               display:none;">
+                    <i class="bi bi-x-circle me-1"></i>Clear filters
+                </button>
+            </div>
+
+            {# Loading spinner #}
+            <div id="loadingState" class="text-center py-5">
+                <div class="spinner-lg mb-3"></div>
+                <p class="text-muted" style="font-size:0.88rem;">Fetching fresh produce…</p>
+            </div>
+
+            {# Error banner #}
+            <div id="errorState" class="d-none">
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong>Could not load products.</strong>
+                    <span id="errorMsg"></span>
+                    <br>
+                    <small class="text-muted">Is the Flask server running? Check the terminal.</small>
+                </div>
+            </div>
+
+            {#
+               Product grid — Bootstrap row-cols breakpoints:
+                 xs  : 1 col  (phones)
+                 sm  : 2 cols (large phones / small tablets)
+                 md  : 2 cols (tablets)
+                 xl  : 3 cols (desktop)
+                 xxl : 4 cols (wide screens)
+               Cards are injected by renderProducts().
+            #}
+            <div id="productGrid" class="d-none fade-in"></div>
+
+            {# Empty-search state #}
+            <div id="emptySearch" class="d-none text-center py-5">
+                <div style="font-size:3.5rem;">🥦</div>
+                <p class="text-muted mt-2 mb-3">No vegetables match your search.</p>
+                <button onclick="clearFilters()"
+                        class="btn btn-sm"
+                        style="border:1px solid var(--border-color);
+                               color:var(--text-primary); background:transparent;">
+                    Clear Filters
+                </button>
+            </div>
+
+        </div>{# /col product area #}
+    </div>{# /row #}
+</div>{# /container #}
+
+
+{# ── Toast Notification ──────────────────────────────────── #}
+{#
+   Fixed, bottom-right. JS adds/removes "toast-show" class.
+   Border colour: --success (green) on success, --danger (red) on error.
+#}
+<div id="cartToast">
+    <div class="d-flex align-items-center gap-2">
+        <i id="toastIcon"
+           class="bi bi-check-circle-fill"
+           style="font-size:1.1rem; color:var(--success);"></i>
+        <span id="toastMsg"
+              style="color:var(--text-bright); font-size:0.88rem;"></span>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{# ══════════════════════════════════════════════════════════════
+   JAVASCRIPT BLOCK
+   Appended before </body> via base.html's extra_scripts block.
+══════════════════════════════════════════════════════════════ #}
+{% block extra_scripts %}
+<script>
+/*
+ * shop.html — FreshPicks Shopping Page Script
+ * =============================================
+ * 1. Restore cart state from server on load  (POST /api/view_cart)
+ * 2. Fetch products on load                  (GET  /api/list_products)
+ * 3. Build category sidebar dynamically
+ * 4. Render responsive Bootstrap product grid
+ * 5. Quantity selection: quick buttons + custom 50g-step input
+ * 6. Add to cart                             (POST /api/add_to_cart)
+ *    Payload: { "veg_id": "...", "qty_g": <integer grams> }
+ * 7. Live progress bar  (₹0 → ₹100 minimum order)
+ * 8. VS Code–styled toast notifications
+ */
+
+/* ── State ─────────────────────────────────────── */
+let allProducts    = [];    // Full product list from API
+let cartTotal      = 0.0;   // Running ₹ grand total
+let cartItemsMap   = {};    // { veg_id: { qty_g, price } }
+let activeCategory = "";    // Active sidebar filter
+
+/* ── Tag → badge colour (VS Code palette) ──────── */
+const TAG_COLORS = {
+    "Farm Fresh" : "#4EC9B0",
+    "Organic"    : "#85C955",
+    "Local"      : "#CE9178",
+    "Premium"    : "#C586C0",
+    "Seasonal"   : "#DCDCAA",
+    "Exotic"     : "#9CDCFE",
+};
+
+/* ── Bootstrap Icon per category ───────────────── */
+const CAT_ICONS = {
+    "Allium"    : "bi-circle",
+    "Leafy"     : "bi-leaf",
+    "Root"      : "bi-tree",
+    "Brassica"  : "bi-flower2",
+    "Cucurbit"  : "bi-egg",
+    "Fruit-Veg" : "bi-apple",
+    "Legume"    : "bi-grid-1x2",
+    "Stem"      : "bi-subtract",
+    "Fungus"    : "bi-asterisk",
+};
+
+
+/* ════════════════════════════════════════════════
+   INITIALISATION
+════════════════════════════════════════════════ */
+
+(async function init() {
+    updateProgressBar();      // Render bar at ₹0 immediately
+    await loadCartState();    // Hydrate total from existing session
+    await fetchProducts();    // Load and render the product grid
+})();
+
+
+/* ════════════════════════════════════════════════
+   DATA LAYER
+════════════════════════════════════════════════ */
+
+/**
+ * loadCartState
+ * POST /api/view_cart — restores cartTotal & cartItemsMap so the
+ * progress bar is accurate when the user returns to the shop page.
+ */
+async function loadCartState() {
+    try {
+        const resp = await fetch("/api/view_cart", {
+            method  : "POST",
+            headers : { "Content-Type": "application/json" },
+            body    : "{}"
+        });
+        const data = await resp.json();
+        if (data.status === "SUCCESS") {
+            cartTotal = parseFloat(data.total) || 0;
+            (data.items || []).forEach(item => {
+                cartItemsMap[item.veg_id] = {
+                    qty_g : item.qty_g,
+                    price : item.price_per_1000g
+                };
+            });
+            updateProgressBar();
+        }
+    } catch (_) { /* Silent fail — progress bar stays at ₹0 */ }
+}
+
+/**
+ * fetchProducts
+ * GET /api/list_products
+ * On success: builds the sidebar and renders the grid.
+ * On failure: shows the error banner.
+ */
+async function fetchProducts() {
+    try {
+        const resp   = await fetch("/api/list_products");
+        const result = await resp.json();
+
+        if (result.status !== "SUCCESS" || !result.products) {
+            showError(result.message || "Unexpected API response.");
+            return;
+        }
+
+        allProducts = result.products;
+        buildCategorySidebar(allProducts);
+        renderProducts(allProducts);
+
+        document.getElementById("loadingState").classList.add("d-none");
+        document.getElementById("productGrid").classList.remove("d-none");
+
+    } catch (_) {
+        showError("Could not connect to server. Is Flask running?");
+    }
+}
+
+
+/* ════════════════════════════════════════════════
+   RENDER — CATEGORY SIDEBAR
+════════════════════════════════════════════════ */
+
+/**
+ * buildCategorySidebar
+ * Counts products per category; injects an "All" pill first then
+ * one pill per unique category (alphabetically sorted).
+ */
+function buildCategorySidebar(products) {
+    const counts = {};
+    products.forEach(p => { counts[p.category] = (counts[p.category] || 0) + 1; });
+
+    const categories = Object.keys(counts).sort();
+    const list       = document.getElementById("categoryList");
+    list.innerHTML   = "";
+
+    // "All" pill
+    const allPill = _makePill("", "bi-grid", "All", products.length, true);
+    allPill.onclick = () => setCategory("", allPill);
+    list.appendChild(allPill);
+
+    categories.forEach(cat => {
+        const pill = _makePill(cat, CAT_ICONS[cat] || "bi-tag", cat, counts[cat], false);
+        pill.onclick = () => setCategory(cat, pill);
+        list.appendChild(pill);
+    });
+}
+
+/** _makePill — creates a single category pill <button>. */
+const PILL_TAG_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0;margin-right:0.45rem;vertical-align:middle;"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
+const PILL_ALL_SVG = '<i class="bi bi-grid me-2" style="font-size:0.82rem;vertical-align:middle;"></i>';
+
+function _makePill(cat, icon, label, count, isActive) {
+    const btn       = document.createElement("button");
+    btn.className   = "category-pill mb-1" + (isActive ? " active" : "");
+    btn.dataset.cat = cat;
+    const iconHtml  = cat === "" ? PILL_ALL_SVG : PILL_TAG_SVG;
+    btn.innerHTML   = iconHtml + escHtml(label)
+                    + `<span class="cat-count">${count}</span>`;
+    return btn;
+}
+
+/**
+ * setCategory
+ * Marks the clicked pill active and re-renders the filtered grid.
+ */
+function setCategory(cat, clickedPill) {
+    activeCategory = cat;
+    document.querySelectorAll(".category-pill").forEach(p => p.classList.remove("active"));
+    clickedPill.classList.add("active");
+    filterProducts();
+}
+
+
+/* ════════════════════════════════════════════════
+   RENDER — PRODUCT GRID
+════════════════════════════════════════════════ */
+
+/**
+ * renderProducts
+ * Groups the products array by `category`, then renders a collapsible
+ * section per category.  The first category is expanded by default;
+ * all others are collapsed.
+ *
+ * Schema fields consumed per card:
+ *   veg_id, name, category, stock_g, price_per_1000g, tag, validity_days
+ *
+ * Image path : /product_images/{veg_id}.jpeg   (strict .jpeg)
+ * Fallback   : onerror replaces the container with .inv-img-placeholder
+ *
+ * NOTE: All template literals are in {% raw %} … {% endraw %} to prevent
+ * Jinja2 from misinterpreting the backtick-less string interpolations.
+ */
+function renderProducts(products) {
+    const grid  = document.getElementById("productGrid");
+    grid.innerHTML = "";
+
+    const emptyEl = document.getElementById("emptySearch");
+    if (products.length === 0) {
+        emptyEl.classList.remove("d-none");
+        document.getElementById("resultCount").textContent = "";
+        return;
+    }
+    emptyEl.classList.add("d-none");
+
+    document.getElementById("resultCount").textContent =
+        products.length + " product" + (products.length !== 1 ? "s" : "") + " found";
+
+    const clearBtn  = document.getElementById("clearFiltersBtn");
+    const hasFilter = activeCategory || document.getElementById("searchInput").value.trim();
+    clearBtn.style.display = hasFilter ? "" : "none";
+
+    /* ── Step 1: Group products by category (preserve insertion order) ── */
+    const groups = {};   // { category: [product, …] }
+    products.forEach(p => {
+        const cat = p.category || "Other";
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(p);
+    });
+
+    const categoryNames = Object.keys(groups);
+
+    /* ── Step 2: Render one collapsible section per category ── */
+    categoryNames.forEach((catName, catIndex) => {
+        const catProducts  = groups[catName];
+        const isFirst      = true;
+        const catIcon      = CAT_ICONS[catName] || "bi-tag";
+        const sectionId    = "cat-section-" + catName.replace(/\s+/g, "-").toLowerCase();
+        const gridId       = "cat-grid-" + catName.replace(/\s+/g, "-").toLowerCase();
+
+        /* ── Section wrapper ── */
+        const section = document.createElement("div");
+        section.className = "cat-section mb-1";
+
+        /* ── Collapsible header ── */
+        const header = document.createElement("button");
+        header.className  = "cat-section-header";
+        header.id         = sectionId;
+        header.type       = "button";
+        header.setAttribute("aria-expanded", isFirst ? "true" : "false");
+        header.setAttribute("aria-controls", gridId);
+        header.innerHTML  =
+            '<svg class="cat-label-icon me-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;">'
+          +   '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>'
+          +   '<line x1="7" y1="7" x2="7.01" y2="7"/>'
+          + '</svg>'
+          + '<span class="cat-section-title">' + escHtml(catName) + '</span>'
+          + '<span class="cat-section-count">' + catProducts.length + '</span>'
+          + '<i class="bi bi-chevron-down cat-chevron' + (isFirst ? " open" : "") + '"></i>';
+
+        /* Toggle logic */
+        header.addEventListener("click", function () {
+            const wrap    = document.getElementById(gridId);
+            const chevron = this.querySelector(".cat-chevron");
+            const isOpen  = wrap.classList.contains("expanded");
+            wrap.classList.toggle("expanded", !isOpen);
+            chevron.classList.toggle("open", !isOpen);
+            this.setAttribute("aria-expanded", String(!isOpen));
+        });
+
+        /* ── Grid wrapper (collapsible) ── */
+        const gridWrap = document.createElement("div");
+        gridWrap.className = "cat-grid-wrap" + (isFirst ? " expanded" : "");
+        gridWrap.id        = gridId;
+
+        /* ── Bootstrap responsive row inside each category ── */
+        const row = document.createElement("div");
+        row.className = "row row-cols-1 row-cols-sm-2 row-cols-md-2 row-cols-xl-3 row-cols-xxl-4 g-3";
+
+        /* CRITICAL: Attach the full section skeleton to the live DOM FIRST.
+           selectQty() calls document.getElementById() — which only works on
+           nodes that are in the document. Attaching before the card loop
+           ensures every qty-{veg_id} hidden input is findable immediately. */
+        gridWrap.appendChild(row);
+        section.appendChild(header);
+        section.appendChild(gridWrap);
+        grid.appendChild(section);
+
+        /* ── Step 3: Build product cards (section already in live DOM) ── */
+        catProducts.forEach(p => {
+            const stockDisplay = p.stock_g >= 1000
+                ? (p.stock_g / 1000).toFixed(1) + " kg"
+                : p.stock_g + " g";
+
+            const isOOS      = p.stock_g === 0;
+            const isLowStock = !isOOS && p.stock_g < 5000;
+            const pricePer50 = ((p.price_per_1000g / 1000) * 50).toFixed(2);
+            const tagColor   = TAG_COLORS[p.tag] || "var(--accent)";
+
+            const col = document.createElement("div");
+            col.className = "col";
+
+            col.innerHTML =
+                '<div class="veg-card' + (isOOS ? " opacity-50" : "") + '" id="card-' + p.veg_id + '">'
+
+                /* 1:1 Image container */
+              + '<div class="card-img-wrap">'
+              +   '<img src="/product_images/' + p.veg_id + '.jpeg"'
+              +        ' alt="' + escHtml(p.name) + '"'
+              +        ' onerror="this.onerror=null; this.parentNode.innerHTML=\'<div class=\\\'inv-img-placeholder\\\'>🥬</div>\';">'
+              +   '<span class="card-tag-badge" style="background:' + tagColor + ';">' + escHtml(p.tag) + '</span>'
+              +   (isOOS ? '<div class="oos-overlay"><span>Out of Stock</span></div>' : "")
+              + '</div>'  /* /card-img-wrap */
+
+                /* Card body */
+              + '<div class="veg-card-body">'
+              +   '<h6 class="text-bright mb-1" style="font-weight:700; font-size:0.98rem; line-height:1.3;">'
+              +     escHtml(p.name)
+              +   '</h6>'
+              +   '<div class="d-flex justify-content-between align-items-center mb-2">'
+              +     '<span style="font-size:0.72rem; color:var(--text-muted);">'
+              +       '<i class="bi bi-tag me-1"></i>' + escHtml(p.category)
+              +     '</span>'
+              +     '<span style="font-size:0.7rem; color:' + (isLowStock ? "var(--warning)" : "var(--text-muted)") + ';">'
+              +       '<i class="bi bi-box-seam me-1"></i>' + stockDisplay + ' left'
+              +     '</span>'
+              +   '</div>'
+              +   '<div class="mb-1">'
+              +     '<span style="color:var(--accent-light); font-size:1.1rem; font-weight:700;">₹' + p.price_per_1000g + '</span>'
+              +     '<span style="color:var(--text-muted); font-size:0.75rem;"> / kg</span>'
+              +     '<span style="color:var(--text-muted); font-size:0.7rem; margin-left:0.4rem;">(₹' + pricePer50 + '/50g)</span>'
+              +   '</div>'
+              +   '<div class="mb-3">'
+              +     '<span class="validity-chip">'
+              +       '<i class="bi bi-calendar2-check"></i>'
+              +       ' ' + p.validity_days + ' day' + (p.validity_days !== 1 ? "s" : "") + ' fresh'
+              +     '</span>'
+              +   '</div>'
+              +   (isOOS
+                    ? '<div class="text-muted text-center mt-auto" style="font-size:0.82rem; padding:0.5rem 0;">Currently unavailable</div>'
+                    : '<!-- Quick qty -->'
+                    + '<div class="d-flex gap-1 mb-2">'
+                    +   '<button class="qty-btn" data-id="' + p.veg_id + '" data-grams="250"'
+                    +           ' onclick="selectQty(\'' + p.veg_id + '\', 250, this)">250g</button>'
+                    +   '<button class="qty-btn" data-id="' + p.veg_id + '" data-grams="500"'
+                    +           ' onclick="selectQty(\'' + p.veg_id + '\', 500, this)">500g</button>'
+                    +   '<button class="qty-btn" data-id="' + p.veg_id + '" data-grams="1000"'
+                    +           ' onclick="selectQty(\'' + p.veg_id + '\', 1000, this)">1 kg</button>'
+                    + '</div>'
+                    + '<!-- Custom gram input -->'
+                    + '<div class="d-flex align-items-center gap-2 mb-2">'
+                    +   '<input type="number" class="custom-gram-input"'
+                    +          ' id="custom-' + p.veg_id + '"'
+                    +          ' placeholder="Custom (g)"'
+                    +          ' min="50" max="' + p.stock_g + '" step="50"'
+                    +          ' oninput="onCustomInput(\'' + p.veg_id + '\', this.value)">'
+                    +   '<span style="font-size:0.72rem; color:var(--text-muted); white-space:nowrap;">grams</span>'
+                    + '</div>'
+                    + '<input type="hidden" id="qty-' + p.veg_id + '" value="500">'
+                    + '<div id="qtyDisplay-' + p.veg_id + '"'
+                    +      ' style="font-size:0.77rem; min-height:1.1rem; margin-bottom:0.6rem; color:var(--text-muted);">'
+                    + '</div>'
+                    + '<button id="addBtn-' + p.veg_id + '"'
+                    +         ' onclick="addToCart(\'' + p.veg_id + '\', ' + p.price_per_1000g + ')"'
+                    +         ' class="btn btn-primary w-100 mt-auto"'
+                    +         ' style="font-size:0.85rem; padding:0.5rem;">'
+                    +   '<i class="bi bi-cart-plus me-1"></i>Add to Cart'
+                    + '</button>'
+                  )
+              + '</div>'  /* /veg-card-body */
+              + '</div>'; /* /veg-card */
+
+            /* col is appended to row which is already in the live DOM,
+               so getElementById can immediately find qty-{veg_id}. */
+            row.appendChild(col);
+
+            /* Pre-select 500g default for in-stock items */
+            if (!isOOS) {
+                const defaultBtn = col.querySelector('.qty-btn[data-grams="500"]');
+                if (defaultBtn) selectQty(p.veg_id, 500, defaultBtn);
+            }
+        });
+    });
+}
+
+
+/* ════════════════════════════════════════════════
+   QUANTITY SELECTION
+════════════════════════════════════════════════ */
+
+/**
+ * selectQty — called by quick-select buttons.
+ * Stores grams in hidden input, highlights active button,
+ * clears the custom input, updates the cost display.
+ */
+function selectQty(veg_id, grams, clickedBtn) {
+    document.getElementById(`qty-${veg_id}`).value    = grams;
+    document.getElementById(`custom-${veg_id}`).value = "";
+
+    document.querySelectorAll(`.qty-btn[data-id="${veg_id}"]`).forEach(btn => {
+        btn.classList.remove("active");
+    });
+    clickedBtn.classList.add("active");
+
+    updateQtyDisplay(veg_id, grams);
+}
+
+/**
+ * onCustomInput — called on every keystroke in the custom field.
+ * Parses value, stores in hidden input, deselects quick buttons.
+ */
+function onCustomInput(veg_id, val) {
+    const grams = parseInt(val) || 0;
+    document.getElementById(`qty-${veg_id}`).value = grams;
+
+    document.querySelectorAll(`.qty-btn[data-id="${veg_id}"]`).forEach(btn => {
+        btn.classList.remove("active");
+    });
+
+    updateQtyDisplay(veg_id, grams);
+}
+
+/**
+ * updateQtyDisplay — shows "✓ 500g selected — ₹20.00".
+ * Cost = (grams / 1000) × price_per_1000g
+ */
+function updateQtyDisplay(veg_id, grams) {
+    const product   = allProducts.find(p => p.veg_id === veg_id);
+    const displayEl = document.getElementById(`qtyDisplay-${veg_id}`);
+    if (!product || !displayEl) return;
+
+    if (grams > 0) {
+        const cost = (grams / 1000) * product.price_per_1000g;
+        displayEl.innerHTML =
+            `<span style="color:var(--accent-light);">✓ ${grams}g selected</span>` +
+            `<span style="color:var(--text-muted); margin-left:0.4rem;">— ₹${cost.toFixed(2)}</span>`;
+    } else {
+        displayEl.innerHTML = "";
+    }
+}
+
+
+/* ════════════════════════════════════════════════
+   ADD TO CART
+════════════════════════════════════════════════ */
+
+/**
+ * addToCart
+ * Validates qty, POSTs to /api/add_to_cart, updates progress bar.
+ *
+ * UNIT CONTRACT: qty_g is ALWAYS an integer in GRAMS.
+ *
+ * VALIDATION:
+ *   qty > 0  AND  qty % 50 === 0
+ */
+async function addToCart(veg_id, price_per_1000g) {
+    const qtyGrams = parseInt(document.getElementById(`qty-${veg_id}`).value) || 0;
+
+    if (qtyGrams <= 0) {
+        showToast("⚠ Please select a quantity first!", false);
+        return;
+    }
+    if (qtyGrams % 50 !== 0) {
+        showToast("⚠ Quantity must be a multiple of 50g", false);
+        return;
+    }
+
+    const btn    = document.getElementById(`addBtn-${veg_id}`);
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-sm me-1"></span>Adding…';
+
+    try {
+        const resp = await fetch("/api/add_to_cart", {
+            method  : "POST",
+            headers : { "Content-Type": "application/json" },
+            body    : JSON.stringify({ veg_id: veg_id, qty_g: qtyGrams })
+        });
+        const result = await resp.json();
+
+        if (result.status === "SUCCESS") {
+            // Remove old contribution if item was already in cart
+            if (cartItemsMap[veg_id]) {
+                const old = cartItemsMap[veg_id];
+                cartTotal -= (old.qty_g / 1000) * old.price;
+            }
+            cartItemsMap[veg_id] = { qty_g: qtyGrams, price: price_per_1000g };
+            cartTotal += (qtyGrams / 1000) * price_per_1000g;
+
+            updateProgressBar();
+            showToast(`✓ Added ${qtyGrams}g to cart!`, true);
+        } else {
+            showToast(`✗ ${result.message || "Failed to add item."}`, false);
+        }
+
+    } catch (_) {
+        showToast("✗ Server error. Please try again.", false);
+    }
+
+    btn.disabled  = false;
+    btn.innerHTML = '<i class="bi bi-cart-plus me-1"></i>Add to Cart';
+}
+
+
+/* ════════════════════════════════════════════════
+   PROGRESS BAR
+════════════════════════════════════════════════ */
+
+{% raw %}
+/**
+ * updateProgressBar — Shop page progress bar.
+ * Fill color: var(--accent) below ₹100, var(--success) at ₹100+.
+ */
+function updateProgressBar() {
+    const MIN_ORDER = 100;
+    const bar       = document.getElementById("cartProgressBar");
+    const label     = document.getElementById("progressLabel");
+    const badge     = document.getElementById("cartBadge");
+
+    const pct = Math.min((cartTotal / MIN_ORDER) * 100, 100);
+    bar.style.width = pct + "%";
+    bar.setAttribute("aria-valuenow", pct);
+
+    if (cartTotal <= 0) {
+        bar.style.backgroundColor = "var(--border-color)";
+        label.innerHTML = `<span style="color:var(--text-muted);">₹0 / ₹100</span>`;
+    } else if (cartTotal < 75) {
+        bar.style.backgroundColor = "var(--danger)";
+        label.innerHTML =
+            `<span style="color:var(--danger);">₹${cartTotal.toFixed(2)} / ₹100 needed</span>`;
+    } else if (cartTotal < MIN_ORDER) {
+        /* ₹75–₹99: accent color, transitioning toward success */
+        bar.style.backgroundColor = "var(--accent)";
+        label.innerHTML =
+            `<span style="color:var(--accent-light);">Almost there! ₹${cartTotal.toFixed(2)} / ₹100</span>`;
+    } else {
+        /* ₹100+: transition to success green */
+        bar.style.backgroundColor = "var(--success)";
+        label.innerHTML =
+            `<span style="color:var(--success);">✓ Ready to checkout — ₹${cartTotal.toFixed(2)}</span>`;
+    }
+
+    if (cartTotal > 0) {
+        badge.style.display = "";
+        badge.textContent   = `₹${cartTotal.toFixed(0)}`;
+    }
+}
+{% endraw %}
+
+
+/* ════════════════════════════════════════════════
+   SEARCH & CATEGORY FILTER
+════════════════════════════════════════════════ */
+
+/**
+ * filterProducts
+ * AND logic: text match × active category.
+ * Text searches name, tag, and category fields.
+ */
+function filterProducts() {
+    const search = document.getElementById("searchInput").value.toLowerCase().trim();
+
+    const filtered = allProducts.filter(p => {
+        const matchSearch = !search ||
+            p.name.toLowerCase().includes(search) ||
+            (p.tag      || "").toLowerCase().includes(search) ||
+            (p.category || "").toLowerCase().includes(search);
+        const matchCat = !activeCategory || p.category === activeCategory;
+        return matchSearch && matchCat;
+    });
+
+    renderProducts(filtered);
+}
+
+/** clearFilters — resets text search and category pill. */
+function clearFilters() {
+    document.getElementById("searchInput").value = "";
+    activeCategory = "";
+    document.querySelectorAll(".category-pill").forEach(p => p.classList.remove("active"));
+    const allPill = document.querySelector('.category-pill[data-cat=""]');
+    if (allPill) allPill.classList.add("active");
+    filterProducts();
+}
+
+
+/* ════════════════════════════════════════════════
+   UI HELPERS
+════════════════════════════════════════════════ */
+
+/**
+ * showToast
+ * Slides the toast in from bottom-right with a spring easing.
+ * Auto-dismisses after 2.8 s. Uses CSS class toggle (no inline
+ * transform writes) so the CSS transition handles the animation.
+ */
+let _toastTimer = null;
+function showToast(message, isSuccess) {
+    const toast  = document.getElementById("cartToast");
+    const icon   = document.getElementById("toastIcon");
+    const msgEl  = document.getElementById("toastMsg");
+
+    msgEl.textContent       = message;
+    toast.style.borderColor = isSuccess ? "var(--success)" : "var(--danger)";
+    icon.style.color        = isSuccess ? "var(--success)" : "var(--danger)";
+    icon.className          = isSuccess
+        ? "bi bi-check-circle-fill"
+        : "bi bi-x-circle-fill";
+
+    toast.classList.add("toast-show");
+
+    if (_toastTimer) clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => toast.classList.remove("toast-show"), 2800);
+}
+
+/** showError — shows the error banner, hides the loader. */
+function showError(msg) {
+    document.getElementById("loadingState").classList.add("d-none");
+    document.getElementById("errorState").classList.remove("d-none");
+    document.getElementById("errorMsg").textContent = " " + msg;
+}
+
+/**
+ * escHtml — minimal XSS guard for API-supplied strings
+ * rendered via innerHTML (name, category, tag).
+ */
+function escHtml(str) {
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+</script>
+<script src="{{ url_for('static', filename='js/ui-helpers.js') }}"></script>
+{% endblock %}

@@ -2,8 +2,6 @@
  * utils.c - Fresh Picks: Data Structure & Binary I/O Utility Library 
  */
 
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -778,7 +776,10 @@ void heap_heapify_down(MinHeap* h, int idx) {
         if (right < h->size && h->data[right].slot_priority < h->data[smallest].slot_priority)
             smallest = right;
 
-        if (smallest != idx) { heap_swap(h, idx, smallest); idx = smallest; }
+        if (smallest != idx) { 
+            heap_swap(h, idx, smallest);
+            idx = smallest;
+        }
         else break;
     }
 }
