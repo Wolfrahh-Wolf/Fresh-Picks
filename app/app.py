@@ -2210,6 +2210,7 @@ if __name__ == "__main__":
         print( "  Mode         :  VERSION B (Intranet Hosting)")
         print()
         print(f"  Home         :  https://{LOCAL_IP}:{PORT}/")
+        print(f"  Presentation :  https://{LOCAL_IP}:{PORT}/presentation")
         print(f"  Admin Portal :  https://{LOCAL_IP}:{PORT}/login/admin")
         print(f"  User Portal  :  https://{LOCAL_IP}:{PORT}/login/user")
         print()

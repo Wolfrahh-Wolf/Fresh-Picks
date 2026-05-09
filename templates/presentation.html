@@ -6,7 +6,7 @@
 <style>
     /* ── Presentation Hero Section ── */
     .presentation-hero {
-        min-height: 90vh;
+        min-height: 85vh;
         display: flex;
         flex-direction: column;
         justify-content: center;
@@ -46,24 +46,36 @@
         font-size: 2rem;
         font-weight: 700;
         color: var(--text-bright);
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
         display: flex;
         align-items: center;
         gap: 0.75rem;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        padding-bottom: 0.5rem;
     }
     .section-title i {
         color: var(--accent);
+    }
+    
+    .subsection-title {
+        font-size: 1.3rem;
+        color: var(--accent-light);
+        margin-bottom: 1.25rem;
+        margin-top: 2rem;
+        font-weight: 600;
     }
 
     /* ── General Card Grid ── */
     .pres-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        /* Adjusted to 200px to allow 4 or 5 cards in a single row on desktop */
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 1.5rem;
-        margin-bottom: 5rem;
+        margin-bottom: 3rem;
+        justify-content: center;
     }
 
-    /* ── Minimal Cards (Features & Unique Nuances) ── */
+    /* ── Minimal Cards (For Application Features) ── */
     .pres-card {
         background: var(--bg-surface);
         border: 1px solid var(--border-color);
@@ -71,7 +83,7 @@
         padding: 1.5rem;
         text-align: center;
         transition: transform var(--transition), border-color var(--transition);
-        text-decoration: none; /* For when it's an anchor tag */
+        text-decoration: none;
         display: block;
         color: inherit;
     }
@@ -82,8 +94,8 @@
         color: inherit;
     }
     .pres-icon {
-        font-size: 2rem;
-        margin-bottom: 1rem;
+        font-size: 2.2rem;
+        margin-bottom: 0.75rem;
         color: var(--accent);
         transition: transform 0.3s ease;
     }
@@ -102,8 +114,8 @@
         margin: 0;
     }
 
-    /* ── DSA Highlight Cards ── */
-    .dsa-card {
+    /* ── Unified Premium Card Style (For Everything) ── */
+    .unified-card {
         background: linear-gradient(145deg, var(--bg-surface) 0%, var(--bg-main) 100%);
         border: 1px solid var(--border-color);
         border-left: 4px solid var(--accent);
@@ -112,19 +124,58 @@
         transition: all 0.3s ease;
         position: relative;
         overflow: hidden;
+        text-decoration: none;
+        display: block;
+        color: inherit;
     }
-    .dsa-card:hover {
+    .unified-card:hover {
         transform: scale(1.03);
         box-shadow: 0 10px 30px rgba(0, 122, 204, 0.15);
         border-color: var(--accent);
+        text-decoration: none;
+        color: inherit;
     }
-    .dsa-title {
+    
+    /* Background watermark icon for visual flair */
+    .unified-card .bg-icon {
+        position: absolute;
+        right: -15px;
+        bottom: -20px;
+        font-size: 6rem;
+        color: rgba(255, 255, 255, 0.03);
+        transform: rotate(-15deg);
+        transition: all 0.3s ease;
+        z-index: 0;
+    }
+    .unified-card:hover .bg-icon {
+        color: rgba(0, 122, 204, 0.1);
+        transform: rotate(0deg) scale(1.1);
+    }
+
+    .card-content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .card-header-flex {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .card-header-flex i {
+        font-size: 1.5rem;
+        color: var(--accent);
+    }
+
+    .unified-title {
         font-size: 1.25rem;
         font-weight: 700;
         color: var(--text-bright);
-        margin-bottom: 0.5rem;
+        margin: 0;
     }
-    .dsa-tech {
+    .unified-badge {
         font-family: var(--font-mono);
         color: var(--success);
         font-size: 0.8rem;
@@ -153,138 +204,213 @@
     </div>
 
     <h2 class="section-title"><i class="bi bi-window-stack"></i> Application Features</h2>
+
+    <h4 class="subsection-title">User Features</h4>
     <div class="pres-grid">
-        
         <a href="/register" class="pres-card">
             <div class="pres-icon"><i class="bi bi-person-plus"></i></div>
             <h4>Register</h4>
-            <p>New user onboarding.</p>
+            <p>New user onboarding</p>
         </a>
-
         <a href="/user_home" class="pres-card">
             <div class="pres-icon"><i class="bi bi-house-door"></i></div>
             <h4>User Dash</h4>
-            <p>Customer control center.</p>
+            <p>Customer Dashboard</p>
         </a>
-
         <a href="/cart" class="pres-card">
             <div class="pres-icon"><i class="bi bi-cart3"></i></div>
             <h4>Shopping Cart</h4>
-            <p>DLL powered checkout.</p>
+            <p>Order Confirmation & Payment</p>
         </a>
-
         <a href="/user_orders" class="pres-card">
             <div class="pres-icon"><i class="bi bi-bag-check"></i></div>
             <h4>My Orders</h4>
-            <p>Customer order history.</p>
+            <p>Customer Order History</p>
         </a>
+        <a href="/profile" class="pres-card">
+            <div class="pres-icon"><i class="bi bi-person-badge"></i></div>
+            <h4>Profile</h4>
+            <p>User Details</p>
+        </a>
+    </div>
 
+    <h4 class="subsection-title">Administrative Controls</h4>
+    <div class="pres-grid">
         <a href="/admin_dash" class="pres-card">
             <div class="pres-icon"><i class="bi bi-speedometer2"></i></div>
             <h4>Admin Dash</h4>
-            <p>System overview.</p>
+            <p>Admin Control Center</p>
         </a>
-
         <a href="/admin_inventory" class="pres-card">
             <div class="pres-icon"><i class="bi bi-box-seam"></i></div>
             <h4>Inventory</h4>
-            <p>Manage DB stock.</p>
+            <p>Manage Stock</p>
         </a>
-
         <a href="/admin_orders" class="pres-card">
             <div class="pres-icon"><i class="bi bi-receipt"></i></div>
             <h4>Admin Orders</h4>
-            <p>Min-Heap dispatching.</p>
+            <p>Manage Orders</p>
         </a>
-
         <a href="/admin_users" class="pres-card">
             <div class="pres-icon"><i class="bi bi-people"></i></div>
             <h4>Users List</h4>
-            <p>Directory & profiles.</p>
+            <p>Customer Info</p>
         </a>
-
         <a href="/admin_analytics" class="pres-card">
             <div class="pres-icon"><i class="bi bi-bar-chart-line"></i></div>
             <h4>Analytics</h4>
-            <p>Revenue & insights.</p>
+            <p>Revenue & Insights</p>
         </a>
-
     </div>
 
-    <<h2 class="section-title"><i class="bi bi-diagram-3-fill"></i> Algorithmic Core (DSA)</h2>
-    <div class="pres-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
-        
-        <div class="dsa-card">
-            <div class="dsa-title">Singly Linked List (SLL)</div>
-            <div class="dsa-tech">Time: O(N) | Space: O(N)</div>
-            <p class="text-white">Serves as the foundational memory architecture. Dynamically deserializes database records directly from flat binary <code>.dat</code> files at runtime.</p>
-        </div>
-
-        <div class="dsa-card">
-            <div class="dsa-title">Doubly Linked List (DLL)</div>
-            <div class="dsa-tech">Time: O(1) Deletions</div>
-            <p class="text-white">Drives the real-time shopping cart. Bi-directional node traversal enables instant mid-list item removals without array-shifting overhead.</p>
-        </div>
-
-        <div class="dsa-card">
-            <div class="dsa-title">Min-Heap (Priority Queue)</div>
-            <div class="dsa-tech">Time: O(log N)</div>
-            <p class="text-white">Powers the Admin Dispatch Engine. Sorts queued orders by delivery urgency (e.g., Morning slots bubble to the root) for immediate extraction.</p>
-        </div>
-
-        <div class="dsa-card">
-            <div class="dsa-title">Circular Linked List (CLL)</div>
-            <div class="dsa-tech">Infinite Loop Routing</div>
-            <p class="text-white">Facilitates the logistics engine. Implements a wrap-around round-robin algorithm to guarantee mathematically equitable order assignment.</p>
-        </div>
-
-        <div class="dsa-card">
-            <div class="dsa-title">Pointer Table Algorithm</div>
-            <div class="dsa-tech">Time: O(1) Access</div>
-            <p class="text-white">Custom lookup table. Parses alphanumeric IDs (U1042 → 42) into array indices to instantly map to specific memory addresses, bypassing SLL searches.</p>
-        </div>
-
-    </div>
-
-    <h2 class="section-title"><i class="bi bi-cpu-fill"></i> Unique Features</h2>
+    <h2 class="section-title mt-5"><i class="bi bi-diagram-3-fill"></i> Algorithmic Core (DSA)</h2>
+    
+    <h4 class="subsection-title">Data Structures</h4>
     <div class="pres-grid">
-        
-        <div class="pres-card" style="cursor: default;">
-            <div class="pres-icon"><i class="bi bi-shield-lock-fill"></i></div>
-            <h4>HTTPS Security</h4>
-            <p>Self-signed X.509 SSL.</p>
+        <div class="unified-card">
+            <i class="bi bi-list-nested bg-icon"></i>
+            <div class="card-content">
+                <div class="card-header-flex">
+                    <i class="bi bi-list-nested"></i><h3 class="unified-title">Singly Linked List</h3>
+                </div>
+                <div class="unified-badge">O(N) Time | O(N) Space</div>
+                <p class="text-white">Serves as the foundational memory architecture. Dynamically deserializes database records directly from flat binary <code>.dat</code> files at runtime.</p>
+            </div>
         </div>
-
-        <div class="pres-card" style="cursor: default;">
-            <div class="pres-icon"><i class="bi bi-hdd-network-fill"></i></div>
-            <h4>Intranet Hosting</h4>
-            <p>0.0.0.0 network binding.</p>
+        <div class="unified-card">
+            <i class="bi bi-arrow-left-right bg-icon"></i>
+            <div class="card-content">
+                <div class="card-header-flex">
+                    <i class="bi bi-arrow-left-right"></i><h3 class="unified-title">Doubly Linked List</h3>
+                </div>
+                <div class="unified-badge">O(1) Mid-List Deletions</div>
+                <p class="text-white">Drives the real-time shopping cart. Bi-directional node traversal enables instant item removals without array-shifting overhead.</p>
+            </div>
         </div>
-
-        <div class="pres-card" style="cursor: default;">
-            <div class="pres-icon"><i class="bi bi-file-earmark-pdf-fill"></i></div>
-            <h4>Receipt PDF</h4>
-            <p>Dynamic FPDF generation.</p>
+        <div class="unified-card">
+            <i class="bi bi-diagram-2 bg-icon"></i>
+            <div class="card-content">
+                <div class="card-header-flex">
+                    <i class="bi bi-diagram-2"></i><h3 class="unified-title">Min-Heap Queue</h3>
+                </div>
+                <div class="unified-badge">O(log N) Time</div>
+                <p class="text-white">Powers the Admin Orders & Dispatch Engine. Sorts queued orders by delivery urgency (e.g., Morning slots bubble to the root) for immediate extraction.</p>
+            </div>
         </div>
-
-        <div class="pres-card" style="cursor: default;">
-            <div class="pres-icon"><i class="bi bi-envelope-paper-fill"></i></div>
-            <h4>Mailing Receipt</h4>
-            <p>C-based SMTP automation.</p>
+        <div class="unified-card">
+            <i class="bi bi-arrow-repeat bg-icon"></i>
+            <div class="card-content">
+                <div class="card-header-flex">
+                    <i class="bi bi-arrow-repeat"></i><h3 class="unified-title">Circular Linked List</h3>
+                </div>
+                <div class="unified-badge">Infinite Loop Routing</div>
+                <p class="text-white">Facilitates the logistics engine. Implements a wrap-around round-robin algorithm to guarantee mathematically equitable order assignment.</p>
+            </div>
         </div>
+    </div>
 
-        <div class="pres-card" style="cursor: default;">
-            <div class="pres-icon"><i class="bi bi-key-fill"></i></div>
-            <h4>Mailing OTP</h4>
-            <p>Secure Time-To-Live logic.</p>
+    <h4 class="subsection-title">Search Algorithms</h4>
+    <div class="pres-grid">
+        <div class="unified-card">
+            <i class="bi bi-hash bg-icon"></i>
+            <div class="card-content">
+                <div class="card-header-flex">
+                    <i class="bi bi-lightning-charge"></i><h3 class="unified-title">Hash Table</h3>
+                </div>
+                <div class="unified-badge">O(1) Lookup / Perfect Hashing</div>
+                <p class="text-white">Custom lookup table. Parses alphanumeric IDs (e.g., U1042 → 42) into array indices to instantly map to specific memory addresses, completely bypassing slow O(N) SLL linear searches.</p>
+            </div>
         </div>
+    </div>
 
-        <div class="pres-card" style="cursor: default;">
-            <div class="pres-icon"><i class="bi bi-credit-card-fill"></i></div>
-            <h4>Razorpay Pipeline</h4>
-            <p>HMAC-SHA256 validation.</p>
+    <h2 class="section-title mt-5"><i class="bi bi-cpu-fill"></i> Unique Engineering Features</h2>
+    
+    <h4 class="subsection-title">Security & Networking</h4>
+    <div class="pres-grid">
+        <div class="unified-card">
+            <i class="bi bi-shield-lock bg-icon"></i>
+            <div class="card-content">
+                <div class="card-header-flex">
+                    <i class="bi bi-shield-lock-fill"></i><h3 class="unified-title">HTTPS Security</h3>
+                </div>
+                <div class="unified-badge">Self-signed X.509 SSL</div>
+                <p class="text-white">Ensures all local traffic is encrypted via TLS, allowing secure interactions with external APIs and preventing packet sniffing.</p>
+            </div>
         </div>
+        <div class="unified-card">
+            <i class="bi bi-incognito bg-icon"></i>
+            <div class="card-content">
+                <div class="card-header-flex">
+                    <i class="bi bi-incognito"></i><h3 class="unified-title">Password Hashing</h3>
+                </div>
+                <div class="unified-badge">SHA-256 Cryptography</div>
+                <p class="text-white">Plaintext credentials are cryptographically hashed in Python before reaching the C-engine, ensuring binary databases remain secure.</p>
+            </div>
+        </div>
+        <div class="unified-card">
+            <i class="bi bi-hdd-network bg-icon"></i>
+            <div class="card-content">
+                <div class="card-header-flex">
+                    <i class="bi bi-hdd-network-fill"></i><h3 class="unified-title">Intranet Hosting</h3>
+                </div>
+                <div class="unified-badge">0.0.0.0 Network Binding</div>
+                <p class="text-white">Dynamically detects the host's local IPv4 address to broadcast the Flask server for seamless cross-device testing on the same network.</p>
+            </div>
+        </div>
+        <div class="unified-card">
+            <i class="bi bi-key bg-icon"></i>
+            <div class="card-content">
+                <div class="card-header-flex">
+                    <i class="bi bi-key-fill"></i><h3 class="unified-title">OTP Verification</h3>
+                </div>
+                <div class="unified-badge">Time-To-Live Logic</div>
+                <p class="text-white">Generates secure, time-limited One Time Passwords (OTPs) for safe user registration and account recovery.</p>
+            </div>
+        </div>
+    </div>
 
+    <h4 class="subsection-title">Automated Mailing & Integrations</h4>
+    <div class="pres-grid">
+        <div class="unified-card">
+            <i class="bi bi-envelope-paper bg-icon"></i>
+            <div class="card-content">
+                <div class="card-header-flex">
+                    <i class="bi bi-envelope-paper-fill"></i><h3 class="unified-title">Receipt Dispatch</h3>
+                </div>
+                <div class="unified-badge">C-Based SMTP Engine</div>
+                <p class="text-white">Instantly packages the generated PDF invoice and emails it directly to the customer's inbox upon a successful checkout.</p>
+            </div>
+        </div>
+        <div class="unified-card">
+            <i class="bi bi-envelope-paper bg-icon"></i>
+            <div class="card-content">
+                <div class="card-header-flex">
+                    <i class="bi bi-envelope-paper-fill"></i><h3 class="unified-title">OTP Dispatch</h3>
+                </div>
+                <div class="unified-badge">C-Based SMTP Engine</div>
+                <p class="text-white">Instantly wraps the OTP and emails it directly to the customer's inbox on crucial operations.</p>
+            </div>
+        </div>
+        <div class="unified-card">
+            <i class="bi bi-credit-card bg-icon"></i>
+            <div class="card-content">
+                <div class="card-header-flex">
+                    <i class="bi bi-credit-card-fill"></i><h3 class="unified-title">Payment Gateway</h3>
+                </div>
+                <div class="unified-badge">Razorpay API</div>
+                <p class="text-white">A secure 2-step checkout pipeline that utilizes server-side HMAC-SHA256 signature validation to prevent client-side cart spoofing.</p>
+            </div>
+        </div>
+        <div class="unified-card">
+            <i class="bi bi-file-earmark-pdf bg-icon"></i>
+            <div class="card-content">
+                <div class="card-header-flex">
+                    <i class="bi bi-file-earmark-pdf-fill"></i><h3 class="unified-title">Dynamic Receipts</h3>
+                </div>
+                <div class="unified-badge">FPDF Python Library</div>
+                <p class="text-white">Generates high-fidelity PDF invoices on the fly, embedding custom brand icons, exact timestamps, and specific transaction details.</p>
+            </div>
+        </div>
     </div>
 
 </div>
