@@ -1,44 +1,7 @@
 {% extends "base.html" %}
-{#
-  shop.html — Fresh Picks: Product Shop Page
-  ==========================================
-  Regenerated from vegetables.html.
-
-  ARCHITECTURE:
-    Inherits from base.html via {% extends %}.
-    All route-facing content lives in {% block content %}.
-    Page-scoped CSS lives in {% block extra_styles %}.
-    Page-scoped JS  lives in {% block extra_scripts %}.
-
-  DATA FLOW:
-    1. Page loads  → JS calls GET  /api/list_products
-    2. User selects qty → JS calls POST /api/add_to_cart
-       Payload: { "veg_id": "...", "qty_g": <integer grams> }
-
-  QUANTITY ENGINE:
-    - DB stores stock_g in GRAMS  (e.g. 50000 = 50 kg)
-    - DB stores price_per_1000g   (e.g. 40 = ₹40 / kg)
-    - UI works in grams internally at all times.
-    - Quick buttons : 250 g / 500 g / 1000 g
-    - Custom input  : any multiple of 50 g (step=50, min=50)
-    - Default selection: 500 g
-
-  PROGRESS BAR  (min order ₹100):
-    Red    → cartTotal < ₹75
-    Yellow → ₹75 ≤ cartTotal < ₹100
-    Green  → cartTotal ≥ ₹100  ← ready to checkout
-
-  Team: CodeCrafters | Project: Fresh Picks | SDP-1
-#}
 
 {% block title %}Shop — FreshPicks{% endblock %}
 
-
-{# ══════════════════════════════════════════════════════════════
-   PAGE-SCOPED STYLES
-   Injected into base.html's <head> via {% block extra_head %}.
-   All colour values reference variables defined in dark-theme.css.
-══════════════════════════════════════════════════════════════ #}
 {% block extra_head %}
 <style>
 /* ── Category sidebar pills ─────────────────────── */

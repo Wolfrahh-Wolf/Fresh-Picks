@@ -63,16 +63,7 @@
                     </div>
 
                     <!-- Address — split into 4 sub-fields -->
-                    <!--
-                        WHY 4 SEPARATE FIELDS?
-                        The DB schema stores address as a CSV string inside the
-                        address column: "DoorNo,Street,Area,PIN"
-                        Collecting each part separately lets us:
-                          1. Validate PIN code format (digits only)
-                          2. Display each part on its own line in profile.html
-                          3. Avoid users entering comma-heavy freeform text that
-                             would break our CSV parsing later.
-                    -->
+                    
                     <div class="col-12">
                         <label class="form-label">
                             <i class="bi bi-geo-alt me-1"></i>Address
