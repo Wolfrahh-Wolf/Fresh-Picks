@@ -31,7 +31,6 @@ Fresh-Picks/
 ├── app/
 │   ├── app.py                  # Flask API Gateway — routing only
 │   ├── bridge.py               # IPC layer — subprocess runner + stdout parser
-│   ├── migrate_password.py     # One-shot SHA-256 migration script
 │   └── static/ & templates/    # Frontend (Bootstrap 5 + VS Code dark theme)
 │
 └── backend/
@@ -110,23 +109,7 @@ The SLL is the primary in-memory representation of every dataset. On each binary
 
 Used for: **Per-user cart state** (`carts/<user_id>_cart.txt`)
 
-The DLL drives the real-time shopping cart. Each `CartNode` carries both `prev` and `next` pointers. The critical advantage over an SLL: **once a node is located, deletion is O(1)** — `curr->prev->next` and `curr->next->prev` are rewired without any predecessor traversal.
-
-```c
-/* O(1) unlink — no back-scan needed because prev is always available */
-if (curr->prev) curr->prev->next = curr->next;
-else            *head            = curr->next;
-if (curr->next) curr->next->prev = curr->prev;
-```
-
-In an SLL, even with a direct pointer to the target node, you cannot unlink it without traversing from head to find its predecessor. The `prev` pointer is what makes O(1) deletion architecturally possible here.
-
-| Operation | SLL | DLL (Fresh Picks) |
-|---|---|---|
-| Find item by `veg_id` | O(N) | O(N) — no index key on cart items |
-| Unlink after find | O(N) predecessor scan | **O(1)** via `prev` |
-| Update quantity | O(N) | O(N) find + O(1) mutate |
-| Get cart total | O(N) | O(N) |
+Drives the real-time shopping cart. Each `CartNode` carries both `prev` and `next` pointers, enabling O(1) item removal once located — no predecessor traversal needed, unlike an SLL.
 
 #### Min-Heap (Priority Queue) — Admin Dispatch Engine
 `O(log N) Time`
@@ -147,13 +130,6 @@ Build:        O(N log N) — N insertions
 Used for: **Round-robin delivery boy assignment** (`utils.c → cll_build_from_sll`, `cll_assign_delivery`)
 
 Built at runtime from the `DeliveryBoyNode` SLL, containing only `is_active = 1` entries. A persistent `last_assigned` counter enables the CLL to resume from where it left off across subprocess calls. Wrap-around is automatic — `tail->next = head`. Guarantees mathematically equitable order distribution among all active delivery personnel with O(1) next-assignment.
-
-#### Standard Queue (FIFO) — Order Processing Pipeline
-`O(1) Enqueue | O(1) Dequeue`
-
-Used for: **Sequential order ingestion** (`utils.c → queue_*`)
-
-A `front/rear` pointer queue that ensures orders are processed strictly in arrival sequence before slot-priority sorting takes over at the dispatch stage.
 
 ---
 
@@ -192,7 +168,7 @@ def _hash_password(plaintext: str) -> str:
     return hashlib.sha256(plaintext.encode("utf-8")).hexdigest()  # 64-char hex
 ```
 
-The C structs store the 64-character hex digest in `char password[MAX_STR_LEN]` (128 bytes). All `strcmp` validations in `auth.c` operate entirely on hashes — the C layer is completely agnostic to this.
+The C structs store the 64-character hex digest in `char password[MAX_STR_LEN]`. All `strcmp` validations in `auth.c` operate entirely on hashes — the C layer is completely agnostic to this.
 
 **OTP Verification** ─ `Time-To-Live Logic`
 Generates secure, time-limited One Time Passwords for safe user registration and account recovery. OTP payloads are staged in server-side session memory with a TTL and cleared immediately on verification or expiry, preventing replay attacks and stale token reuse.
@@ -217,7 +193,7 @@ On registration and password recovery, `mailer.c` wraps the generated OTP into a
 A secure 2-step checkout pipeline. After payment, the server performs HMAC-SHA256 signature verification on the Razorpay callback payload before marking any order as placed. Client-side cart values are never trusted — the signature check prevents cart spoofing and tampered payment amounts.
 
 **Dynamic Receipts** ─ `FPDF Python Library`
-Generates high-fidelity PDF invoices on the fly at checkout. Each receipt embeds the brand identity, exact order timestamp, full item breakdown with per-item price snapshots, delivery slot, assigned agent details, and transaction total. Also renderable inline via `html2pdf.js` for dark-theme browser preview before download.
+Generates high-fidelity PDF invoices on the fly at checkout. Each receipt embeds the brand identity, exact order timestamp, full item breakdown with per-item price snapshots, delivery slot, assigned agent details, and transaction total.
 
 ---
 
@@ -226,9 +202,8 @@ Generates high-fidelity PDF invoices on the fly at checkout. Each receipt embeds
 ### Prerequisites
 
 ```
-GCC         (tested with GCC 13+)
-Python 3.x  (3.10+ recommended)
-OpenSSL     (for HTTPS certificate generation)
+GCC        (tested with GCC 13+)
+Python 3.x (3.10+ recommended)
 ```
 
 ### Install Python Dependencies
@@ -244,22 +219,13 @@ cd backend/
 bash build.sh
 ```
 
-Produces: `auth`, `order`, `inventory`, `delivery`, `analytics`, `users`, `receipt`, `mailer`, `admin_tools`
+> `build.sh` is included in the repository. It compiles all C source files and produces the following binaries: `auth`, `order`, `inventory`, `delivery`, `analytics`, `users`, `receipt`, `mailer`, `admin_tools`
 
 ### Generate SSL Certificates
 
 ```bash
 cd app/
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
-```
-
-### (First-time only) Migrate Passwords to SHA-256
-
-If you have an existing `users.dat` / `admin_creds.dat` with plaintext passwords, run the one-shot migration script before starting the server:
-
-```bash
-cd backend/
-python ../app/migrate_password.py
+python generate_certs.py
 ```
 
 ### Launch the Server
@@ -283,23 +249,20 @@ Access from any device on the same network at that address.
 
 All `.dat` files are flat binary — no delimiters, no headers. Records are fixed-size C structs written with `fwrite` and read back with `fread`. Sizes verified against `sizeof()` at runtime.
 
-| Struct | Size | File |
-|---|---|---|
-| `User` | **916 bytes** | `users.dat` |
-| `AdminCreds` | **532 bytes** | `admin_creds.dat` |
-| `Vegetable` | — | `products.dat` |
-| `Order` | — | `orders.dat` |
-| `FreeItem` | — | `free_inventory.dat` |
-| `DeliveryBoy` | — | `delivery_boys.dat` |
+| Struct | File |
+|---|---|
+| `User` | `users.dat` |
+| `AdminCreds` | `admin_creds.dat` |
+| `Vegetable` | `products.dat` |
+| `Order` | `orders.dat` |
+| `FreeItem` | `free_inventory.dat` |
+| `DeliveryBoy` | `delivery_boys.dat` |
 
 All size constants defined in `models.h` — `MAX_STR_LEN (128)`, `MAX_ID_LEN (20)`, `MAX_ADD_LEN (256)`.
 
 ---
 
 ## Troubleshooting
-
-**Blank PDFs on receipt download**
-CSS variables (`var(--accent)`) are stripped during `html2pdf.js` canvas rendering. Use hardcoded hex colours inside the receipt clone element.
 
 **`[SKIP] users.dat not found` during migration**
 Run the migration script from inside `backend/`, or apply the `os.path.abspath(__file__)` path fix so it resolves correctly from any working directory.
