@@ -9,6 +9,8 @@ import secrets
 import tempfile
 import razorpay
 import hashlib
+import json
+from queue import SimpleQueue
 from datetime import datetime, timedelta
 from config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, APP_SECRET_KEY
 
@@ -20,7 +22,8 @@ from flask import (
     session,
     redirect,
     send_from_directory,
-    send_file
+    send_file,
+    Response
 )
 
 from bridge import run_c_binary
@@ -30,6 +33,7 @@ from flask_cors import CORS
 _rzp_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 OTP_STORE = {}
 OTP_TTL_MINUTES = 10
+_order_listeners: list = []
 
 # ─────────────────────────────────────────────────────────────
 # Flask App Setup
@@ -1535,6 +1539,13 @@ def api_verify_and_checkout():
     # C stdout: SUCCESS|order_id|total|slot|boy_name|boy_phone|items_string
     parts = result["raw_output"].strip().split("\n")[0].split("|")
 
+    for _q in _order_listeners:
+        _q.put({
+            "order_id": parts[1] if len(parts) > 1 else "",
+            "total":    _safe_float(parts[2]) if len(parts) > 2 else 0.0,
+            "slot":     parts[3] if len(parts) > 3 else ""
+        })
+
     return jsonify({
         "status":   "SUCCESS",
         "order_id": parts[1] if len(parts) > 1 else "",
@@ -1607,6 +1618,26 @@ def api_get_admin_orders():
 
     orders = _parse_multiline_orders(result["raw_output"])
     return jsonify({"status": "SUCCESS", "orders": orders})
+
+
+@app.route("/api/admin/order_stream")
+def api_admin_order_stream():
+    if session.get("role") != "admin":
+        return jsonify({"status": "ERROR", "message": "Admin only"}), 403
+
+    q = SimpleQueue()
+    _order_listeners.append(q)
+
+    def event_generator():
+        try:
+            while True:
+                order = q.get()
+                yield f"data: {json.dumps(order)}\n\n"
+        finally:
+            _order_listeners.remove(q)   # clean up when admin closes tab
+
+    return Response(event_generator(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.route("/api/update_order_status", methods=["POST"])
@@ -2225,5 +2256,6 @@ if __name__ == "__main__":
         host        = HOST,
         port        = PORT,
         debug       = DEBUG,
-        ssl_context = ssl_ctx
+        ssl_context = ssl_ctx,
+        threaded    = True
     )

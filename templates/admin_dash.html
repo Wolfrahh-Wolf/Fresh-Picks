@@ -20,6 +20,33 @@
     .stat-card-wrap {
         position: relative;
     }
+
+    #order-toast-wrap {
+        position: fixed;
+        bottom: 1.5rem;
+        right:  1.5rem;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+    }
+
+    .order-toast {
+        background: var(--bg-main);
+        border: 1px solid var(--accent);
+        border-left: 4px solid var(--accent);
+        border-radius: 8px;
+        padding: 0.85rem 1.1rem;
+        min-width: 280px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        animation: toast-in 0.3s ease;
+        color: var(--text-primary);
+    }
+
+    @keyframes toast-in {
+        from { opacity: 0; transform: translateY(16px); }
+        to   { opacity: 1; transform: translateY(0);    }
+    }
 </style>
 {% endblock %}
 
@@ -255,6 +282,49 @@
         } catch (err) {
             console.warn("Could not load admin info:", err);
         }
+    })();
+
+    /* ── Order Toast Container ── */
+    const _toastWrap = document.createElement("div");
+    _toastWrap.id = "order-toast-wrap";
+    document.body.appendChild(_toastWrap);
+
+    function showOrderToast(order) {
+        const toast = document.createElement("div");
+        toast.className = "order-toast";
+        toast.innerHTML = `
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <i class="bi bi-bag-check-fill" style="color:var(--accent);font-size:1.1rem;"></i>
+                <strong class="text-bright">New Order Received</strong>
+            </div>
+            <div class="text-muted" style="font-size:0.82rem;">
+                <span class="text-bright">${order.order_id}</span> &nbsp;|&nbsp;
+                ₹${parseFloat(order.total).toFixed(2)} &nbsp;|&nbsp;
+                ${order.slot} Slot
+            </div>`;
+
+        _toastWrap.appendChild(toast);
+
+        /* Auto-remove after 6 seconds */
+        setTimeout(() => toast.remove(), 6000);
+    }
+
+    /* ── SSE Connection ── */
+    (function connectOrderStream() {
+        const stream = new EventSource("/api/admin/order_stream");
+
+        stream.onmessage = (e) => {
+            try {
+                const order = JSON.parse(e.data);
+                showOrderToast(order);
+            } catch (_) {}
+        };
+
+        /* Reconnect automatically if connection drops */
+        stream.onerror = () => {
+            stream.close();
+            setTimeout(connectOrderStream, 3000);
+        };
     })();
 </script>
 {% endblock %}

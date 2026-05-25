@@ -282,9 +282,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    printf("sizeof(User)       = %zu\n", sizeof(User));
-    printf("sizeof(AdminCreds) = %zu\n", sizeof(AdminCreds));
-
     /* ── Load SLLs (source of truth) ── */
     UserNode  *user_head  = load_user_sll();
     AdminNode *admin_head = load_admin_sll();
