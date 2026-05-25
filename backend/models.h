@@ -34,6 +34,9 @@
 #define ORDER_GROWTH_SIZE   100
 #define USER_INIT_SIZE      100
 #define USER_GROWTH_SIZE     50
+#define MAX_CFG_VALUE       512
+#define MAX_URL_VALUE      1024
+
 
 /* ═══════════════════════════════════════════════════════════════
    SECTION 2: BINARY FILE PATH CONSTANTS
@@ -189,6 +192,16 @@ typedef struct {
     int inactive_delivery_boys;
 } StaffMetrics;
 
+/* ─────────────────────────────────────────────
+   MAILER CONFIG STRUCT DEFINITIONS
+   ───────────────────────────────────────────── */
+typedef struct MailConfig {
+    char smtp_email[MAX_CFG_VALUE];
+    char smtp_password[MAX_CFG_VALUE];
+    char smtp_host[MAX_CFG_VALUE];
+    char smtp_port[MAX_CFG_VALUE];
+    char sender_name[MAX_CFG_VALUE];
+} MailConfig;
 
 /* ═══════════════════════════════════════════════════════════════
    SECTION 5: SLL NODE STRUCTS

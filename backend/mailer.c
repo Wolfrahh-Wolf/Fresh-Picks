@@ -10,16 +10,6 @@
 #include "models.h"
 #include <curl/curl.h>
 
-#define MAX_CFG_VALUE 512
-#define MAX_URL_VALUE 1024
-
-typedef struct MailConfig {
-    char smtp_email[MAX_CFG_VALUE];
-    char smtp_password[MAX_CFG_VALUE];
-    char smtp_host[MAX_CFG_VALUE];
-    char smtp_port[MAX_CFG_VALUE];
-    char sender_name[MAX_CFG_VALUE];
-} MailConfig;
 
 static void trim(char *s) {
     size_t start = 0;
