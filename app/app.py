@@ -1160,14 +1160,14 @@ def api_admin_inventory_data():
 def api_list_products():
     """
     GET /api/list_products
-    Calls: ./order list_products
+    Calls: ./inventory list_products
 
     C output (multi-line):
       SUCCESS|
       veg_id|category|name|stock_g|price_per_1000g|tag|validity_days
       ...
     """
-    result = run_c_binary("order", ["list_products"])
+    result = run_c_binary("inventory", ["list_products"])
 
     if result["status"] != "SUCCESS":
         return jsonify({"status": "ERROR", "message": result["data"]})

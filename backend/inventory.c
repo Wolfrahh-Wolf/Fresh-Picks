@@ -8,6 +8,34 @@
 #include <string.h>
 #include "models.h" 
 
+/*
+ * Print every product from the already-loaded veg SLL.
+ * OUTPUT:  SUCCESS|
+ *          veg_id|category|name|stock_g|price_per_1000g|tag|validity_days
+ */
+void cmd_list_products(VegNode* veg_head) {
+    if (!veg_head) {
+        printf("SUCCESS|\n");
+        return;
+    }
+
+    printf("SUCCESS|\n");
+
+    VegNode* curr = veg_head;
+    while (curr != NULL) {
+        printf("%s|%s|%s|%d|%.2f|%s|%d\n",
+            curr->data.veg_id,
+            curr->data.category,
+            curr->data.name,
+            curr->data.stock_g,
+            curr->data.price_per_1000g,
+            curr->data.tag,
+            curr->data.validity_days
+        );
+        curr = curr->next;
+    }
+}
+
 
 /* cmd_update_stock — O(1) lookup by veg_id, update fields, persist */
 void cmd_update_stock(const char *veg_id, int new_stock_g,
@@ -105,7 +133,10 @@ int main(int argc, char *argv[]) {
 
     const char *cmd = argv[1];
 
-    if (strcmp(cmd, "update_stock") == 0) {
+    if (strcmp(cmd, "list_products") == 0) {
+        cmd_list_products(veg_head);
+        
+    } else if (strcmp(cmd, "update_stock") == 0) {
         /* argv: inventory update_stock <veg_id> <stock_g> <price> <validity>  argc >= 6 */
         if (argc < 6) { PRINT_ERROR("Usage: update_stock <veg_id> <stock_g> <price> <validity>"); goto cleanup; }
         cmd_update_stock(argv[2], atoi(argv[3]), atof(argv[4]), atoi(argv[5]),

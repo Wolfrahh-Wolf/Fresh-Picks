@@ -1,12 +1,5 @@
 /*
  * users.c - Fresh Picks: User Management Logic
- * ===========================================================================
- * COMMANDS (argv[1]):
- *   list_users   [filter]   — all users, or filtered by "active" | "inactive"
- *   search_users <query>    — match user_id (exact) OR full_name (substring)
- *   get_user     <user_id>  — single user full profile
- *
- * Team: CodeCrafters | Project: Fresh Picks | SDP-1
  */
 
 #include <stdio.h>

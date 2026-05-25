@@ -1,5 +1,5 @@
 /*
- * delivery.c - Fresh Picks: Cross-platform SMTP mailer
+ * mailer.c - Fresh Picks: Cross-platform SMTP mailer
  *              using libcurl's native SMTP + MIME APIs.
  */
 
@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include "models.h"
 #include <curl/curl.h>
 
 #define MAX_CFG_VALUE 512

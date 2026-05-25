@@ -171,34 +171,6 @@ void check_and_apply_freebies(CartNode**     head,
    ═════════════════════════════════════════════════════════════ */
 
 /*
- * Print every product from the already-loaded veg SLL.
- * OUTPUT:  SUCCESS|
- *          veg_id|category|name|stock_g|price_per_1000g|tag|validity_days
- */
-void cmd_list_products(VegNode* veg_head) {
-    if (!veg_head) {
-        printf("SUCCESS|\n");
-        return;
-    }
-
-    printf("SUCCESS|\n");
-
-    VegNode* curr = veg_head;
-    while (curr != NULL) {
-        printf("%s|%s|%s|%d|%.2f|%s|%d\n",
-            curr->data.veg_id,
-            curr->data.category,
-            curr->data.name,
-            curr->data.stock_g,
-            curr->data.price_per_1000g,
-            curr->data.tag,
-            curr->data.validity_days
-        );
-        curr = curr->next;
-    }
-}
-
-/*
  * Add or update one vegetable in the user's cart DLL.
  * Uses O(1) veg_table lookup instead of linear SLL walk.
  * OUTPUT:  SUCCESS|Item added to cart
@@ -621,10 +593,7 @@ int main(int argc, char* argv[]) {
     int ord_count = sll_count_orders(ord_head);
 
     /* ── Dispatch ──────────────────────────────────────────────── */
-    if (strcmp(cmd, "list_products") == 0) {
-        cmd_list_products(veg_head);
-
-    } else if (strcmp(cmd, "add_to_cart") == 0) {
+    if (strcmp(cmd, "add_to_cart") == 0) {
         if (argc < 5) { PRINT_ERROR("Usage: add_to_cart <user_id> <veg_id> <grams>"); goto cleanup; }
         cmd_add_to_cart(argv[2], argv[3], atoi(argv[4]),
                         veg_table, veg_table_size);
