@@ -11,6 +11,23 @@
 
 ---
 
+**Live:** [https://fresh-picks-deploy.onrender.com](https://fresh-picks-deploy.onrender.com)
+
+> ⚠️ Hosted on Render free tier. First load after inactivity may take ~30 seconds to wake up.
+
+---
+
+## Demo Access
+
+| Role  | Username | Password    |
+|-------|----------|-------------|
+| User  | `User`   | `User@123`  |
+| Admin | `Admin`  | `Admin@123` |
+
+> OTP emails may land in spam on first receipt — mark as "Not Spam" to receive future emails correctly.
+
+---
+
 ## What is Fresh Picks?
 
 Fresh Picks is a high-performance, intranet-hosted e-commerce platform built for local grocery management. The core architectural decision that separates it from standard web apps: **all business logic and state management runs inside compiled C binaries**, not in Python or a database engine.
